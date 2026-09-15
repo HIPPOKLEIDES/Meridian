@@ -92,6 +92,16 @@ export function signOut() {
   token = null;
 }
 
+/** An error from the Google Health API, keeping its status (e.g. INVALID_ARGUMENT) for fallbacks. */
+export class GoogleHealthError extends Error {
+  constructor(
+    message: string,
+    readonly status: string,
+  ) {
+    super(message);
+  }
+}
+
 async function call(path: string, init: RequestInit = {}): Promise<Json> {
   if (!isSignedIn()) throw new Error('Not signed in to Google (tokens last an hour). Connect again.');
   const res = await fetch(API + path, {
@@ -100,20 +110,32 @@ async function call(path: string, init: RequestInit = {}): Promise<Json> {
   });
   if (!res.ok) {
     let message = `${res.status} ${res.statusText}`;
+    let status = String(res.status);
     try {
       const body = await res.json();
       message = body?.error?.message ?? message;
+      status = body?.error?.status ?? status;
+      // Google puts the specific reason (which field, what's wrong) in the details.
+      const reasons = (body?.error?.details ?? [])
+        .flatMap((d: Json) => [...(d.fieldViolations ?? []).map((v: Json) => `${v.field}: ${v.description}`), d.reason].filter(Boolean))
+        .filter((r: string) => r && !message.includes(r));
+      if (reasons.length) message = `${message} (${reasons.join('; ')})`;
     } catch {
       /* non-JSON error body */
     }
-    throw new Error(message);
+    throw new GoogleHealthError(message, status);
   }
   return res.json();
 }
 
-const civil = (k: DateKey) => {
+/** For tests: install an access token without the Google sign-in popup. */
+export function setAccessTokenForTests(value: string | null) {
+  token = value ? { value, expiresAt: Date.now() + 3_600_000 } : null;
+}
+
+const civilDate = (k: DateKey) => {
   const [year, month, day] = k.split('-').map(Number);
-  return { date: { year, month, day }, time: { hours: 0, minutes: 0, seconds: 0 } };
+  return { year, month, day };
 };
 
 const keyOf = (d: Json): DateKey | null =>
@@ -121,14 +143,24 @@ const keyOf = (d: Json): DateKey | null =>
 
 const num = (v: unknown) => (typeof v === 'number' ? v : typeof v === 'string' ? Number(v) : NaN);
 
-/** Per-day aggregates, chunked to the API's 90-day range limit. */
+/**
+ * The exclusive end of a civil range that stops at `end` (inclusive), but never in the future:
+ * for today it's the current time, since the last window may be shorter than a day.
+ */
+function civilEndAfter(end: DateKey, now = new Date()) {
+  const today = toKey(now);
+  if (end < today) return { date: civilDate(addDays(end, 1)) };
+  return { date: civilDate(today), time: { hours: now.getHours(), minutes: now.getMinutes(), seconds: now.getSeconds() } };
+}
+
+/** Per-day aggregates, in chunks within the API's 90-day range limit. */
 async function dailyRollUp(type: string, start: DateKey, end: DateKey): Promise<Json[]> {
   const out: Json[] = [];
   for (let s = start; s <= end; s = addDays(s, 90)) {
     const e = addDays(s, 89) < end ? addDays(s, 89) : end;
     let pageToken: string | undefined;
     do {
-      const body = { range: { start: civil(s), end: civil(addDays(e, 1)) }, windowSizeDays: 1, pageSize: 1000, pageToken };
+      const body = { range: { start: { date: civilDate(s) }, end: civilEndAfter(e) }, windowSizeDays: 1, pageSize: 1000, ...(pageToken ? { pageToken } : {}) };
       const page = await call(`/${type}/dataPoints:dailyRollUp`, { method: 'POST', body: JSON.stringify(body) });
       out.push(...(page.rollupDataPoints ?? []));
       pageToken = page.nextPageToken || undefined;
@@ -137,11 +169,11 @@ async function dailyRollUp(type: string, start: DateKey, end: DateKey): Promise<
   return out;
 }
 
-async function listPoints(type: string, filter: string): Promise<Json[]> {
+async function listPoints(type: string, filter: string, pageSize = 1000): Promise<Json[]> {
   const out: Json[] = [];
   let pageToken: string | undefined;
   do {
-    const q = new URLSearchParams({ filter, pageSize: '1000' });
+    const q = new URLSearchParams({ filter, pageSize: String(pageSize) });
     if (pageToken) q.set('pageToken', pageToken);
     const page = await call(`/${type}/dataPoints?${q}`);
     out.push(...(page.dataPoints ?? []));
@@ -152,10 +184,54 @@ async function listPoints(type: string, filter: string): Promise<Json[]> {
 
 type Point = { date: DateKey; value: number };
 
-const fromRollup = (points: Json[], pick: (value: Json) => number): Point[] =>
+const fromRollup = (points: Json[], pick: (point: Json) => number): Point[] =>
   points
-    .map((p) => ({ date: keyOf(p.civilStartTime?.date), value: pick(p.value ?? {}) }))
+    .map((p) => ({ date: keyOf(p.civilStartTime?.date), value: pick(p) }))
     .filter((p): p is Point => !!p.date && Number.isFinite(p.value));
+
+/** Adds up interval data points (e.g. per-minute steps) into one value per civil day. */
+function sumByDay(points: Json[], field: string, pick: (value: Json) => number, start: DateKey, end: DateKey): Point[] {
+  const byDate = new Map<DateKey, number>();
+  for (const p of points) {
+    const value = p[field];
+    const date = keyOf(value?.interval?.civilStartTime?.date);
+    const n = pick(value ?? {});
+    if (!date || date < start || date > end || !Number.isFinite(n)) continue;
+    byDate.set(date, (byDate.get(date) ?? 0) + n);
+  }
+  return [...byDate.entries()].map(([date, value]) => ({ date, value }));
+}
+
+/** The latest sample on each civil day (API results are newest first, but don't rely on it). */
+function latestByDay(points: Json[], field: string, pick: (value: Json) => number, start: DateKey, end: DateKey): Point[] {
+  const best = new Map<DateKey, { at: string; value: number }>();
+  for (const p of points) {
+    const value = p[field];
+    const date = keyOf(value?.sampleTime?.civilTime?.date);
+    const at = String(value?.sampleTime?.physicalTime ?? '');
+    const n = pick(value ?? {});
+    if (!date || date < start || date > end || !Number.isFinite(n)) continue;
+    const current = best.get(date);
+    if (!current || at > current.at) best.set(date, { at, value: n });
+  }
+  return [...best.entries()].map(([date, { value }]) => ({ date, value }));
+}
+
+const civilRangeFilter = (field: string, start: DateKey, end: DateKey) => `${field} >= "${start}" AND ${field} < "${addDays(end, 1)}"`;
+
+/**
+ * Daily totals for an interval data type. Uses the server-side daily roll-up, and if Google rejects that request
+ * falls back to listing the raw intervals and adding them up here (slower, same result).
+ */
+async function dailyTotals(type: string, field: string, start: DateKey, end: DateKey, fromRollupValue: (v: Json) => number, fromPoint: (v: Json) => number) {
+  try {
+    return fromRollup(await dailyRollUp(type, start, end), (p) => fromRollupValue(p[field] ?? {}));
+  } catch (e) {
+    if (!(e instanceof GoogleHealthError) || !['INVALID_ARGUMENT', 'FAILED_PRECONDITION', 'UNIMPLEMENTED', '400'].includes(e.status)) throw e;
+    const points = await listPoints(type, civilRangeFilter(`${type.replace(/-/g, '_')}.interval.civil_start_time`, start, end), 10000);
+    return sumByDay(points, field, fromPoint, start, end);
+  }
+}
 
 const round = (v: number, d: number) => Math.round(v * 10 ** d) / 10 ** d;
 
@@ -171,27 +247,34 @@ export const SYNC_LABELS: Record<SyncedMetric, string> = {
 export async function fetchMetric(source: SyncedMetric, metric: Metric, start: DateKey, end: DateKey): Promise<Point[]> {
   switch (source) {
     case 'steps':
-      return fromRollup(await dailyRollUp('steps', start, end), (v) => num(v.steps?.countSum)).filter((p) => p.value > 0);
+      return (await dailyTotals('steps', 'steps', start, end, (v) => num(v.countSum), (v) => num(v.count))).filter((p) => p.value > 0);
+    case 'activeZoneMinutes':
+      return dailyTotals(
+        'active-zone-minutes',
+        'activeZoneMinutes',
+        start,
+        end,
+        (v) => num(v.sumInFatBurnHeartZone ?? 0) + num(v.sumInCardioHeartZone ?? 0) + num(v.sumInPeakHeartZone ?? 0),
+        (v) => num(v.activeZoneMinutes),
+      );
     case 'weight': {
       const toLb = /lb/i.test(metric.unit);
-      return fromRollup(await dailyRollUp('weight', start, end), (v) => {
-        const kg = num(v.weight?.weightKilogramsAvg);
-        return round(toLb ? kg * 2.20462 : kg, 1);
-      });
+      const points = await listPoints('weight', civilRangeFilter('weight.sample_time.civil_time', start, end));
+      return latestByDay(points, 'weight', (v) => num(v.weightGrams) / 1000, start, end).map((p) => ({
+        date: p.date,
+        value: round(toLb ? p.value * 2.20462 : p.value, 1),
+      }));
     }
-    case 'bodyFat':
-      return fromRollup(await dailyRollUp('body-fat', start, end), (v) => round(num(v.bodyFat?.bodyFatPercentageAvg), 1));
-    case 'activeZoneMinutes':
-      return fromRollup(await dailyRollUp('active-zone-minutes', start, end), (v) => {
-        const a = v.activeZoneMinutes ?? {};
-        return num(a.sumInFatBurnHeartZone ?? 0) + num(a.sumInCardioHeartZone ?? 0) + num(a.sumInPeakHeartZone ?? 0);
-      });
+    case 'bodyFat': {
+      const points = await listPoints('body-fat', civilRangeFilter('body_fat.sample_time.civil_time', start, end));
+      return latestByDay(points, 'bodyFat', (v) => num(v.percentage), start, end).map((p) => ({ date: p.date, value: round(p.value, 1) }));
+    }
     case 'restingHeartRate':
-      return (await listPoints('daily-resting-heart-rate', `dailyRestingHeartRate.date >= "${start}"`))
+      return (await listPoints('daily-resting-heart-rate', civilRangeFilter('daily_resting_heart_rate.date', start, end)))
         .map((p) => ({ date: keyOf(p.dailyRestingHeartRate?.date), value: num(p.dailyRestingHeartRate?.beatsPerMinute) }))
-        .filter((p): p is Point => !!p.date && p.date <= end && Number.isFinite(p.value));
+        .filter((p): p is Point => !!p.date && p.date >= start && p.date <= end && Number.isFinite(p.value));
     case 'sleep': {
-      const sessions = await listPoints('sleep', `sleep.interval.end_time >= "${new Date(start + 'T00:00:00').toISOString()}"`);
+      const sessions = await listPoints('sleep', `sleep.interval.end_time >= "${new Date(start + 'T00:00:00').toISOString()}"`, 25);
       const byDate = new Map<DateKey, number>();
       for (const s of sessions) {
         const endTime = s.sleep?.interval?.endTime;
