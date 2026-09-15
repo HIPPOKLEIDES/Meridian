@@ -4,24 +4,35 @@ import type { DateKey, ID, Priority, Task } from '../types';
 import { useStore } from '../store';
 import { useUI } from '../ui';
 import { blockersOf, byId, isOverdue, PRIORITIES, taskArea } from '../lib/tasks';
-import { addDays, fmtRange, todayKey } from '../lib/dates';
+import { addDays, fmtClock, fmtDateShort, fmtRange, nowMinutes, todayKey } from '../lib/dates';
+import { nextTimeframe } from '../lib/timeframes';
+import { beginTaskDrag, useTaskDrag } from '../lib/taskDrag';
 import { useNow } from '../lib/hooks';
 import { AreaDot, AreaSelect, CheckButton, Icon, PriorityBadge } from './common';
 import { TaskAssignees } from '../cloud/ui/Assignees';
+import { TaskTags } from './tags';
+import { addTag, parseTitleTags } from '../lib/tags';
 
 export function TaskRow({
   task,
   tasks,
   showProject = true,
   priorityEditable = false,
+  draggable = false,
 }: {
   task: Task;
   /** Lookup of all tasks, for lock state. */
   tasks: Record<ID, Task>;
   showProject?: boolean;
   priorityEditable?: boolean;
+  /** Show a handle for dragging the task onto the day clock. */
+  draggable?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const blocks = useStore((s) => s.blocks);
+  const now = useNow(60_000);
+  const today = todayKey();
+  const next = nextTimeframe(task.id, blocks, today, nowMinutes(now));
   const project = useStore((s) => (task.projectId ? s.projects.find((p) => p.id === task.projectId) : undefined));
   const projects = useStore((s) => s.projects);
   const setStatus = useStore((s) => s.setTaskStatus);
@@ -38,6 +49,18 @@ export function TaskRow({
   return (
     <div className={`task-row${done ? ' is-done' : ''}${locked ? ' is-locked' : ''}`}>
       <div className="task-row-main" onClick={() => open({ kind: 'task', id: task.id })}>
+        {draggable && (
+          <button
+            type="button"
+            className="drag-handle"
+            aria-label={`Drag “${task.title || 'Untitled task'}” onto the clock to schedule it`}
+            title="Drag onto the clock to plan time for it"
+            onPointerDown={(e) => beginTaskDrag(e, { id: task.id, title: task.title || 'Untitled task' })}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Icon name="grip" size={14} />
+          </button>
+        )}
         <CheckButton
           checked={done}
           disabled={locked}
@@ -52,10 +75,16 @@ export function TaskRow({
           <div className="task-row-meta">
             <AreaDot areaId={areaId} />
             {showProject && project && <span>{project.name}</span>}
+            <TaskTags tags={task.tags} />
             {(task.startDate || task.endDate) && (
               <span className={overdue ? 'is-overdue' : ''}>
                 <Icon name="calendar" size={12} /> {fmtRange(task.startDate, task.endDate)}
                 {overdue && ' · overdue'}
+              </span>
+            )}
+            {next && !done && (
+              <span className="task-row-timeframe" title="Next planned time for this task">
+                <Icon name="clock" size={12} /> {next.date === today ? 'Today' : fmtDateShort(next.date)} {fmtClock(next.start)}–{fmtClock(next.end)}
               </span>
             )}
             {locked && (
@@ -112,6 +141,17 @@ export function TaskRow({
   );
 }
 
+/** Follows the pointer while a task is being dragged. */
+export function TaskDragGhost() {
+  const drag = useTaskDrag((s) => s.drag);
+  if (!drag) return null;
+  return (
+    <div className={`task-drag-ghost${drag.target ? ' is-over' : ''}`} style={{ left: drag.x, top: drag.y }} aria-hidden="true">
+      <Icon name="clock" size={13} /> {drag.title}
+    </div>
+  );
+}
+
 export function QuickAddTask({ defaults, placeholder = 'Add a task and press Enter' }: { defaults: Partial<Task>; placeholder?: string }) {
   const addTask = useStore((s) => s.addTask);
   const [title, setTitle] = useState('');
@@ -120,8 +160,9 @@ export function QuickAddTask({ defaults, placeholder = 'Add a task and press Ent
       className="quick-add"
       onSubmit={(e) => {
         e.preventDefault();
-        if (!title.trim()) return;
-        addTask({ ...defaults, title: title.trim() });
+        const parsed = parseTitleTags(title);
+        if (!parsed.title) return;
+        addTask({ ...defaults, title: parsed.title, tags: parsed.tags.reduce((all, tag) => addTag(all, tag), defaults.tags ?? []) });
         setTitle('');
       }}
     >

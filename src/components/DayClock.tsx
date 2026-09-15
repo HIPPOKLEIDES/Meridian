@@ -1,11 +1,14 @@
-import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { DateKey, ID, Minutes } from '../types';
 import { useStore } from '../store';
 import { useUI } from '../ui';
 import { assignLanes, planForDate } from '../lib/plan';
-import { fmtClock, fmtDuration, fmtHours, nowMinutes, toKey } from '../lib/dates';
+import { fmtClock, fmtDateShort, fmtDuration, fmtHours, nowMinutes, toKey } from '../lib/dates';
 import { byId } from '../lib/tasks';
 import { useNow } from '../lib/hooks';
+import { placeTimeframe, snapMinutes } from '../lib/timeframes';
+import { useTaskDrag, useTaskDropTarget } from '../lib/taskDrag';
+import { sound } from '../lib/sound';
 
 const S = 480;
 const C = S / 2;
@@ -54,15 +57,35 @@ interface Arc {
   slot: number | null;
   areaName: string | null;
   pending?: boolean;
+  /** A task timeframe, and whether the task is done. */
+  taskId?: ID | null;
+  done?: boolean;
+  repeating?: boolean;
   lane: number;
   lanes: number;
 }
 
 type Drag = { ring: 'plan' | 'log'; a: number; b: number };
 
+/** Moving a planned block, or dragging one of its ends. */
+type Edit = { id: ID; mode: 'move' | 'start' | 'end'; grab: number; last: number; orig: { start: Minutes; end: Minutes }; start: Minutes; end: Minutes; repeating: boolean };
+
+/** The copy of m (±1 day) closest to ref, so dragging across midnight doesn't jump around the dial. */
+const unwrap = (m: number, ref: number) => [m - 1440, m, m + 1440].reduce((best, c) => (Math.abs(c - ref) < Math.abs(best - ref) ? c : best));
+
+const edgeTolerance = (duration: number) => Math.max(5, Math.min(15, duration * 0.25));
+
+const DROP_TARGET = 'day-clock';
+
 export function DayClock({ date }: { date: DateKey }) {
   const blocks = useStore((s) => s.blocks);
   const habits = useStore((s) => s.habits);
+  const tasks = useStore((s) => s.tasks);
+  const projects = useStore((s) => s.projects);
+  const addBlock = useStore((s) => s.addBlock);
+  const updateBlock = useStore((s) => s.updateBlock);
+  const toast = useUI((s) => s.toast);
+  const taskDrag = useTaskDrag((s) => s.drag);
   const entries = useStore((s) => s.entries);
   const timer = useStore((s) => s.timer);
   const areaList = useStore((s) => s.areas);
@@ -73,10 +96,11 @@ export function DayClock({ date }: { date: DateKey }) {
 
   const svgRef = useRef<SVGSVGElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
-  const [hover, setHover] = useState<{ arc: Arc; x: number; y: number } | null>(null);
+  const [hover, setHover] = useState<{ arc: Arc; x: number; y: number; edge: 'start' | 'end' | null } | null>(null);
   const [drag, setDrag] = useState<Drag | null>(null);
+  const [edit, setEdit] = useState<Edit | null>(null);
 
-  const plan = useMemo(() => planForDate({ blocks, habits }, date), [blocks, habits, date]);
+  const plan = useMemo(() => planForDate({ blocks, habits, tasks, projects }, date), [blocks, habits, tasks, projects, date]);
 
   const arcs = useMemo(() => {
     const areas = byId(areaList);
@@ -93,6 +117,9 @@ export function DayClock({ date }: { date: DateKey }) {
       slot: area(p.areaId)?.slot ?? null,
       areaName: area(p.areaId)?.name ?? null,
       pending: p.kind === 'habit' && !p.done,
+      taskId: p.taskId,
+      done: p.kind === 'block' && !!p.taskId && !!p.done,
+      repeating: p.repeating,
       lane: planLanes.lanes[i],
       lanes: planLanes.count,
     }));
@@ -140,7 +167,34 @@ export function DayClock({ date }: { date: DateKey }) {
     return (deg / 360) * 1440;
   };
 
-  const snap = (m: number) => Math.max(0, Math.min(1440, Math.round(m / SNAP) * SNAP));
+  const snap = (m: number) => snapMinutes(m, SNAP);
+
+  // Dropping a task on the clock plans an hour for it at that time, on the day shown.
+  const onTaskDrop = useCallback(
+    (taskId: ID, clientX: number, clientY: number) => {
+      const task = useStore.getState().tasks.find((t) => t.id === taskId);
+      if (!task || !svgRef.current) return;
+      const { start, end } = placeTimeframe(toMinute({ clientX, clientY }));
+      addBlock({ title: task.title, taskId, date, start, end, repeatDays: [], areaId: null });
+      sound('connect');
+      toast(`Planned “${task.title || 'Untitled task'}” ${fmtClock(start)}–${fmtClock(end)}${date === toKey(new Date()) ? '' : ` on ${fmtDateShort(date)}`}. Drag its ends to adjust.`, null);
+    },
+    // toMinute only reads the svg's current position, so it needn't be a dependency.
+    [addBlock, date, toast],
+  );
+  useTaskDropTarget(DROP_TARGET, svgRef, onTaskDrop);
+  const dropPreview = taskDrag?.target === DROP_TARGET && svgRef.current ? placeTimeframe(toMinute({ clientX: taskDrag.x, clientY: taskDrag.y })) : null;
+
+  const beginEdit = (arc: Arc) => (e: ReactPointerEvent) => {
+    if (e.button !== 0 || arc.kind !== 'block' || !arc.id) return;
+    e.stopPropagation();
+    svgRef.current!.setPointerCapture(e.pointerId);
+    const m = unwrap(toMinute(e), (arc.start + arc.end) / 2);
+    const tol = edgeTolerance(arc.end - arc.start);
+    const mode = m - arc.start < tol ? 'start' : arc.end - m < tol ? 'end' : 'move';
+    setHover(null);
+    setEdit({ id: arc.id, mode, grab: m, last: m, orig: { start: arc.start, end: arc.end }, start: arc.start, end: arc.end, repeating: !!arc.repeating });
+  };
 
   const beginDrag = (ring: 'plan' | 'log') => (e: ReactPointerEvent) => {
     if (e.button !== 0) return;
@@ -151,6 +205,21 @@ export function DayClock({ date }: { date: DateKey }) {
   };
 
   const moveDrag = (e: ReactPointerEvent) => {
+    if (edit) {
+      const m = unwrap(toMinute(e), edit.last);
+      const duration = edit.orig.end - edit.orig.start;
+      let { start, end } = edit;
+      if (edit.mode === 'move') {
+        start = Math.max(0, Math.min(1440 - duration, edit.orig.start + Math.round((m - edit.grab) / SNAP) * SNAP));
+        end = start + duration;
+      } else if (edit.mode === 'start') {
+        start = Math.max(0, Math.min(edit.end - SNAP, snap(m)));
+      } else {
+        end = Math.min(1440, Math.max(edit.start + SNAP, snap(m)));
+      }
+      setEdit({ ...edit, last: m, start, end });
+      return;
+    }
     if (!drag) return;
     const m = toMinute(e);
     // Unwrap so dragging across midnight doesn't jump to the other side of the dial.
@@ -160,6 +229,19 @@ export function DayClock({ date }: { date: DateKey }) {
   };
 
   const endDrag = () => {
+    if (edit) {
+      setEdit(null);
+      const block = blocks.find((b) => b.id === edit.id);
+      if (!block) return;
+      if (edit.start === edit.orig.start && edit.end === edit.orig.end) {
+        open({ kind: 'block', id: edit.id, on: date });
+        return;
+      }
+      updateBlock(edit.id, { start: edit.start, end: edit.end });
+      sound('tick');
+      if (edit.repeating) toast('Changed every occurrence of this repeating block.', null);
+      return;
+    }
     if (!drag) return;
     let start = snap(Math.min(drag.a, drag.b));
     let end = snap(Math.max(drag.a, drag.b));
@@ -180,9 +262,15 @@ export function DayClock({ date }: { date: DateKey }) {
   };
 
   const showHover = (arc: Arc, e: ReactPointerEvent) => {
-    if (drag) return;
+    if (drag || edit) return;
     const rect = wrapRef.current!.getBoundingClientRect();
-    setHover({ arc, x: e.clientX - rect.left, y: e.clientY - rect.top });
+    let edge: 'start' | 'end' | null = null;
+    if (arc.kind === 'block') {
+      const m = unwrap(toMinute(e), (arc.start + arc.end) / 2);
+      const tol = edgeTolerance(arc.end - arc.start);
+      edge = m - arc.start < tol ? 'start' : arc.end - m < tol ? 'end' : null;
+    }
+    setHover({ arc, x: e.clientX - rect.left, y: e.clientY - rect.top, edge });
   };
 
   // Center readout
@@ -212,14 +300,19 @@ export function DayClock({ date }: { date: DateKey }) {
     const fits = Math.floor((arcLen - 14) / 6.4);
     const showLabel = arc.ring === 'plan' && laneW >= 16 && fits >= 4;
     const pathId = `lbl-${arc.key.replace(/[^a-z0-9]/gi, '')}`;
-    const prefix = arc.kind === 'habit' && !arc.pending ? '✓ ' : '';
+    const prefix = (arc.kind === 'habit' && !arc.pending) || arc.done ? '✓ ' : '';
+    const editable = arc.kind === 'block';
+    const edgeHover = hover?.arc.key === arc.key ? hover.edge : null;
     return (
       <g
         key={arc.key}
-        className={`clock-arc${arc.pending ? ' is-pending' : ''}${arc.kind === 'timer' ? ' is-running' : ''}`}
+        className={`clock-arc${arc.pending ? ' is-pending' : ''}${arc.kind === 'timer' ? ' is-running' : ''}${editable ? ' is-editable' : ''}${
+          edgeHover ? ' is-edge' : ''
+        }${edit?.id === arc.id ? ' is-editing' : ''}${arc.done ? ' is-done' : ''}`}
         onPointerMove={(e) => showHover(arc, e)}
         onPointerLeave={() => setHover(null)}
-        onClick={() => openArc(arc)}
+        onPointerDown={editable ? beginEdit(arc) : undefined}
+        onClick={editable ? undefined : () => openArc(arc)}
         role={arc.id ? 'button' : undefined}
         aria-label={`${arc.title}, ${fmtClock(arc.start)} to ${fmtClock(arc.end)}`}
       >
@@ -245,12 +338,14 @@ export function DayClock({ date }: { date: DateKey }) {
     return { path: b > a ? sector(ring.r0, ring.r1, a, b) : null, a, b };
   })();
 
+  const shownArcs = edit ? arcs.map((a) => (a.kind === 'block' && a.id === edit.id ? { ...a, start: edit.start, end: edit.end } : a)) : arcs;
+
   return (
     <div className="clock" ref={wrapRef}>
       <svg
         ref={svgRef}
         viewBox={`0 0 ${S} ${S}`}
-        className={`clock-svg${drag ? ' is-dragging' : ''}`}
+        className={`clock-svg${drag || edit ? ' is-dragging' : ''}${dropPreview ? ' is-drop-target' : ''}`}
         onPointerMove={moveDrag}
         onPointerUp={endDrag}
         onPointerCancel={() => setDrag(null)}
@@ -288,9 +383,10 @@ export function DayClock({ date }: { date: DateKey }) {
           );
         })}
 
-        {arcs.map(renderArc)}
+        {shownArcs.map(renderArc)}
 
         {dragArc?.path && <path d={dragArc.path} className="clock-drag" />}
+        {dropPreview && <path d={sector(PLAN.r0, PLAN.r1, dropPreview.start, dropPreview.end)} className="clock-drop-preview" />}
 
         {isToday && (
           <g className="clock-hand" pointerEvents="none">
@@ -305,7 +401,25 @@ export function DayClock({ date }: { date: DateKey }) {
         )}
 
         <g className="clock-center" pointerEvents="none">
-          {dragArc ? (
+          {dropPreview && taskDrag ? (
+            <>
+              <text x={C} y={C - 10} textAnchor="middle" className="clock-big">
+                {fmtClock(dropPreview.start)}–{fmtClock(dropPreview.end)}
+              </text>
+              <text x={C} y={C + 22} textAnchor="middle" className="clock-sub">
+                {truncate(`Plan · ${taskDrag.title}`, 26)}
+              </text>
+            </>
+          ) : edit ? (
+            <>
+              <text x={C} y={C - 10} textAnchor="middle" className="clock-big">
+                {fmtClock(edit.start)}–{fmtClock(edit.end)}
+              </text>
+              <text x={C} y={C + 22} textAnchor="middle" className="clock-sub">
+                {edit.mode === 'move' ? 'Move' : 'Resize'} · {fmtDuration(edit.end - edit.start)}
+              </text>
+            </>
+          ) : dragArc ? (
             <>
               <text x={C} y={C - 10} textAnchor="middle" className="clock-big">
                 {fmtClock(dragArc.a)}–{fmtClock(dragArc.b)}
@@ -358,7 +472,9 @@ export function DayClock({ date }: { date: DateKey }) {
                 ? 'Habit · not done yet'
                 : 'Habit · done'
               : hover.arc.kind === 'block'
-                ? 'Planned block'
+                ? hover.arc.taskId
+                  ? `Task time${hover.arc.done ? ' · task done' : ''} · drag to move, ends to resize`
+                  : 'Planned block · drag to move, ends to resize'
                 : hover.arc.kind === 'timer'
                   ? 'Timer running'
                   : 'Logged time'}
@@ -374,7 +490,7 @@ export function DayClock({ date }: { date: DateKey }) {
         <span>
           <i className="key-ring log" /> Inner ring: logged
         </span>
-        <span className="muted">Drag a ring to add</span>
+        <span className="muted">Drag a ring to add, or drag a task onto the clock</span>
       </div>
     </div>
   );

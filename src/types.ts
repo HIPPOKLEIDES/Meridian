@@ -42,6 +42,8 @@ export interface Task {
   flow: { x: number; y: number } | null;
   createdAt: number;
   completedAt: number | null;
+  /** Free-form labels, e.g. "art" or "needs review". */
+  tags?: string[];
   /** Account ids of the people this task is assigned to (shared projects). */
   assigneeIds?: string[];
   /** Account id of whoever created the task, when signed in. */

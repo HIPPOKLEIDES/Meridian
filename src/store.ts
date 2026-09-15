@@ -229,7 +229,8 @@ export const useStore = create<Store>()(
           tasks: s.tasks
             .filter((t) => t.id !== id)
             .map((t) => (t.dependsOn.includes(id) ? { ...t, dependsOn: t.dependsOn.filter((d) => d !== id) } : t)),
-          blocks: s.blocks.map((b) => (b.taskId === id ? { ...b, taskId: null } : b)),
+          // One-off timeframes for the task go with it; repeating blocks stay, just unlinked.
+          blocks: s.blocks.filter((b) => b.taskId !== id || b.repeatDays.length).map((b) => (b.taskId === id ? { ...b, taskId: null } : b)),
           entries: s.entries.map((e) => (e.taskId === id ? { ...e, taskId: null } : e)),
           timer: s.timer?.taskId === id ? { ...s.timer, taskId: null } : s.timer,
         })),

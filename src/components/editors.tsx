@@ -1,13 +1,16 @@
 import { useMemo, useState } from 'react';
-import type { DateKey, Habit, ID, Project, Task, TaskStatus, TimeBlock, TimeEntry } from '../types';
-import { newBlock, newEntry, newHabit, newProject, newTask, useStore } from '../store';
+import type { DateKey, Habit, ID, Minutes, Project, Task, TaskStatus, TimeBlock, TimeEntry } from '../types';
+import { newBlock, newEntry, newHabit, newProject, newTask, uid, useStore } from '../store';
 import { useUI, type Dialog } from '../ui';
 import { byId, blockersOf, dependentsOf, PRIORITIES, taskArea, wouldCycle } from '../lib/tasks';
-import { fmtClock, fmtDuration, todayKey } from '../lib/dates';
+import { fmtClock, fmtDuration, nowMinutes, todayKey } from '../lib/dates';
+import { DEFAULT_TIMEFRAME_MINUTES, describeRepeat, suggestedStart, timeframesOf } from '../lib/timeframes';
 import { useNotes } from '../notes/store';
 import { AreaSelect, Field, Icon, Modal, PriorityBadge, Segmented } from './common';
 import { Checklist, DateInput, DayPicker, StepList, TimeInput } from './inputs';
 import { AssigneePicker } from '../cloud/ui/Assignees';
+import { TagInput } from './tags';
+import { hasTag, tagsInUse } from '../lib/tags';
 
 export function DialogHost() {
   const dialog = useUI((s) => s.dialog);
@@ -44,6 +47,16 @@ function TaskEditor({ id, draft }: { id: ID | null; draft?: Partial<Task> }) {
   const existing = id ? store.tasks.find((t) => t.id === id) : undefined;
   const [t, setT] = useState<Task>(() => (existing ? structuredClone(existing) : newTask(draft)));
   const set = (patch: Partial<Task>) => setT((prev) => ({ ...prev, ...patch }));
+  // Timeframes are time blocks linked to the task; edited here as a draft and saved with the task.
+  const [frames, setFrames] = useState<DraftTimeframe[]>(() =>
+    timeframesOf(t.id, store.blocks).map((b) => ({ id: b.id, date: b.date, start: b.start, end: b.end, repeatDays: b.repeatDays, isNew: false })),
+  );
+  const framesValid = frames.every((f) => f.end > f.start);
+  // Suggest the project's own tags first, then tags used anywhere else.
+  const tagSuggestions = useMemo(() => {
+    const inProject = t.projectId ? tagsInUse(store.tasks.filter((x) => x.projectId === t.projectId)) : [];
+    return [...inProject, ...tagsInUse(store.tasks).filter((tag) => !hasTag(inProject, tag))];
+  }, [store.tasks, t.projectId]);
 
   const map = useMemo(() => ({ ...byId(store.tasks), [t.id]: t }), [store.tasks, t]);
   const projects = byId(store.projects);
@@ -58,14 +71,31 @@ function TaskEditor({ id, draft }: { id: ID | null; draft?: Partial<Task> }) {
 
   if (id && !existing) return null;
 
+  const saveTimeframes = (task: Task) => {
+    const saved = timeframesOf(task.id, useStore.getState().blocks);
+    for (const b of saved) if (!frames.some((f) => f.id === b.id)) store.deleteBlock(b.id);
+    for (const f of frames) {
+      if (f.isNew) {
+        store.addBlock({ id: f.id, title: task.title, taskId: task.id, date: f.date, start: f.start, end: f.end, repeatDays: f.repeatDays, areaId: null });
+      } else {
+        const b = saved.find((x) => x.id === f.id);
+        if (b && (b.date !== f.date || b.start !== f.start || b.end !== f.end || b.title !== task.title)) {
+          store.updateBlock(f.id, { date: f.date, start: f.start, end: f.end, title: task.title });
+        }
+      }
+    }
+  };
+
   const save = () => {
     let { startDate, endDate } = t;
     if (startDate && !endDate) endDate = startDate;
     if (endDate && !startDate) startDate = endDate;
     if (startDate && endDate && endDate < startDate) [startDate, endDate] = [endDate, startDate];
     const final: Task = { ...t, title: t.title.trim() || 'Untitled task', startDate, endDate };
+    if (!framesValid) return;
     if (existing) store.updateTask(t.id, final);
     else store.addTask(final);
+    saveTimeframes(final);
     close();
   };
 
@@ -104,7 +134,7 @@ function TaskEditor({ id, draft }: { id: ID | null; draft?: Partial<Task> }) {
           <button className="btn" onClick={close}>
             Cancel
           </button>
-          <button className="btn primary" onClick={save}>
+          <button className="btn primary" onClick={save} disabled={!framesValid}>
             {existing ? 'Save' : 'Create task'}
           </button>
         </>
@@ -127,6 +157,10 @@ function TaskEditor({ id, draft }: { id: ID | null; draft?: Partial<Task> }) {
             value={t.notes}
             onChange={(e) => set({ notes: e.target.value })}
           />
+          <div className="field">
+            <span className="field-label">Tags</span>
+            <TagInput tags={t.tags ?? []} onChange={(tags) => set({ tags })} suggestions={tagSuggestions} />
+          </div>
           <div className="field">
             <span className="field-label">
               Subtasks
@@ -240,10 +274,70 @@ function TaskEditor({ id, draft }: { id: ID | null; draft?: Partial<Task> }) {
               Clear dates
             </button>
           )}
+          <TimeframesField
+            frames={frames}
+            onChange={setFrames}
+            defaultDate={frames[frames.length - 1]?.date ?? t.startDate ?? todayKey()}
+          />
           {logged > 0 && <p className="muted small">Time logged: {fmtDuration(logged)}</p>}
         </div>
       </div>
     </Modal>
+  );
+}
+
+interface DraftTimeframe {
+  id: ID;
+  date: DateKey;
+  start: Minutes;
+  end: Minutes;
+  repeatDays: number[];
+  isNew: boolean;
+}
+
+/** When you plan to work on a task: any number of timeframes, today or on future days. */
+function TimeframesField({ frames, onChange, defaultDate }: { frames: DraftTimeframe[]; onChange: (frames: DraftTimeframe[]) => void; defaultDate: DateKey }) {
+  const patch = (id: ID, change: Partial<DraftTimeframe>) => onChange(frames.map((f) => (f.id === id ? { ...f, ...change } : f)));
+  const total = frames.filter((f) => !f.repeatDays.length && f.end > f.start).reduce((s, f) => s + f.end - f.start, 0);
+  return (
+    <div className="field">
+      <span className="field-label">
+        Timeframes
+        {total > 0 && <span className="muted"> · {fmtDuration(total)} planned</span>}
+      </span>
+      {frames.length > 0 && (
+        <ul className="timeframe-list">
+          {frames.map((f) => (
+            <li key={f.id} className="timeframe-row">
+              <DateInput value={f.date} onChange={(date) => date && patch(f.id, { date })} />
+              <div className="timeframe-times">
+                <TimeInput value={f.start} onChange={(start) => patch(f.id, { start })} />
+                <span className="muted">–</span>
+                <TimeInput value={f.end} isEnd onChange={(end) => patch(f.id, { end })} />
+                <button type="button" className="btn icon ghost sm" aria-label="Remove timeframe" onClick={() => onChange(frames.filter((x) => x.id !== f.id))}>
+                  <Icon name="x" size={14} />
+                </button>
+              </div>
+              {f.repeatDays.length > 0 && <span className="small muted">Repeats {describeRepeat(f.repeatDays)}</span>}
+              {f.end <= f.start && <span className="small tone tone-bad">Must end after it starts</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+      <button
+        type="button"
+        className="btn sm align-start"
+        onClick={() => {
+          const today = todayKey();
+          const date = defaultDate < today ? today : defaultDate;
+          const start = suggestedStart(date, today, nowMinutes(new Date()));
+          onChange([...frames, { id: uid(), date, start, end: Math.min(1440, start + DEFAULT_TIMEFRAME_MINUTES), repeatDays: [], isNew: true }]);
+        }}
+      >
+        <Icon name="plus" size={14} /> Add timeframe
+      </button>
+      <span className="field-hint">Or drag the task onto the clock on the Today page, for any day.</span>
+    </div>
   );
 }
 

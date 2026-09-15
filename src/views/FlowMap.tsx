@@ -26,6 +26,7 @@ import { CheckButton, Icon, PriorityBadge } from '../components/common';
 import { byId, flowState, layoutFlow, NODE_W, wouldCycle, type FlowState } from '../lib/tasks';
 import { fmtRange } from '../lib/dates';
 import { useResolvedTheme } from '../lib/hooks';
+import { TaskTags } from '../components/tags';
 
 type TaskNodeData = { task: Task; state: FlowState; blockers: number };
 type TaskNode = Node<TaskNodeData, 'task'>;
@@ -68,6 +69,11 @@ function TaskNodeView({ data, selected }: NodeProps<TaskNode>) {
         )}
         {(task.startDate || task.endDate) && <span>{fmtRange(task.startDate, task.endDate)}</span>}
       </div>
+      {task.tags?.length ? (
+        <div className="flow-node-tags">
+          <TaskTags tags={task.tags} max={4} />
+        </div>
+      ) : null}
       <Handle type="source" position={Position.Right} className="flow-handle" />
       {dropTarget && <Handle id="drop" type="target" position={Position.Left} className="flow-drop-target" />}
     </div>

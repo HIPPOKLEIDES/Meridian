@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { Icon } from './components/common';
 import { DialogHost } from './components/editors';
-import { MiniTimer, Toasts } from './components/widgets';
+import { MiniTimer, TaskDragGhost, Toasts } from './components/widgets';
 import { navigate, useResolvedTheme, useRoute } from './lib/hooks';
 import { todayKey } from './lib/dates';
 import { TodayView } from './views/Today';
@@ -110,6 +110,7 @@ export function App() {
       <DialogHost />
       <CloudDialogs />
       <Toasts />
+      <TaskDragGhost />
     </div>
   );
 }

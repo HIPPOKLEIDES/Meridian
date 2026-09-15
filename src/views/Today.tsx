@@ -5,7 +5,7 @@ import { useUI } from '../ui';
 import { DayClock } from '../components/DayClock';
 import { AreaDot, CheckButton, Empty, Icon } from '../components/common';
 import { DateNav, QuickAddTask, TaskRow, TimerCard } from '../components/widgets';
-import { fmtClock, fmtDateLong, fmtDuration, todayKey } from '../lib/dates';
+import { fmtClock, fmtDateLong, fmtDateShort, fmtDuration, nowMinutes, todayKey } from '../lib/dates';
 import { isScheduled, streakStats } from '../lib/habits';
 import { planForDate } from '../lib/plan';
 import { byId, compareTasks, isActiveOn, isOverdue } from '../lib/tasks';
@@ -17,6 +17,8 @@ import { MOODS, moodColor } from '../journal/types';
 import { latestCheckIn, reviewStatus, useGoals } from '../goals/store';
 import { isOpenGoal } from '../goals/types';
 import { useTasksForMe } from '../cloud/ui/Assignees';
+import { DEFAULT_TIMEFRAME_MINUTES, hasTimeframeOn, nextTimeframe, suggestedStart } from '../lib/timeframes';
+import { beginTaskDrag } from '../lib/taskDrag';
 
 export function TodayView({ date }: { date: DateKey }) {
   const today = todayKey();
@@ -48,6 +50,7 @@ export function TodayView({ date }: { date: DateKey }) {
         <div className="today-left">
           <section className="card clock-card">
             <DayClock date={date} />
+            <PlanTray date={date} />
           </section>
           <AgendaCard date={date} />
         </div>
@@ -68,7 +71,9 @@ function AgendaCard({ date }: { date: DateKey }) {
   const blocks = useStore((s) => s.blocks);
   const habits = useStore((s) => s.habits);
   const open = useUI((s) => s.open);
-  const plan = useMemo(() => planForDate({ blocks, habits }, date), [blocks, habits, date]);
+  const tasks = useStore((s) => s.tasks);
+  const projects = useStore((s) => s.projects);
+  const plan = useMemo(() => planForDate({ blocks, habits, tasks, projects }, date), [blocks, habits, tasks, projects, date]);
   return (
     <section className="card">
       <header className="card-head">
@@ -196,7 +201,8 @@ function TasksCard({ date }: { date: DateKey }) {
   const tasks = useTasksForMe(allTasks);
   const isToday = date === todayKey();
   const overdue = isToday ? tasks.filter((t) => isOverdue(t, date)).sort(compareTasks) : [];
-  const active = tasks.filter((t) => isActiveOn(t, date)).sort(compareTasks);
+  const blocks = useStore((s) => s.blocks);
+  const active = tasks.filter((t) => isActiveOn(t, date) || (t.status !== 'done' && hasTimeframeOn(t.id, blocks, date))).sort(compareTasks);
   const inProgress = isToday
     ? tasks.filter((t) => t.status === 'doing' && !isActiveOn(t, date) && !isOverdue(t, date)).sort(compareTasks)
     : [];
@@ -222,7 +228,7 @@ function TasksCard({ date }: { date: DateKey }) {
           <div key={g.label} className="task-group">
             {groups.length > 1 && <div className="group-label">{g.label}</div>}
             {g.items.map((t) => (
-              <TaskRow key={t.id} task={t} tasks={map} />
+              <TaskRow key={t.id} task={t} tasks={map} draggable />
             ))}
           </div>
         ))
@@ -355,5 +361,89 @@ function NextStepsCard() {
         ))}
       </ul>
     </section>
+  );
+}
+
+/** Open tasks to drag onto the clock (or schedule with a tap), right under it. */
+function PlanTray({ date }: { date: DateKey }) {
+  const allTasks = useStore((s) => s.tasks);
+  const projects = useStore((s) => s.projects);
+  const blocks = useStore((s) => s.blocks);
+  const open = useUI((s) => s.open);
+  const mine = useTasksForMe(allTasks);
+  const [query, setQuery] = useState('');
+  const [expanded, setExpanded] = useState(false);
+  const today = todayKey();
+  const nowMin = nowMinutes(new Date());
+  const projectName = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
+
+  const q = query.trim().toLowerCase();
+  // Tasks meant for this day come first, then the rest by priority.
+  const relevance = (t: (typeof mine)[number]) => (isActiveOn(t, date) || isOverdue(t, date) || t.status === 'doing' ? 0 : 1);
+  const candidates = mine
+    .filter((t) => t.status !== 'done' && (!q || t.title.toLowerCase().includes(q)))
+    .sort((a, b) => relevance(a) - relevance(b) || compareTasks(a, b));
+  const shown = expanded || q ? candidates.slice(0, 40) : candidates.slice(0, 5);
+
+  if (!mine.some((t) => t.status !== 'done')) return null;
+
+  return (
+    <div className="plan-tray">
+      <div className="plan-tray-head">
+        <span className="small">
+          <b>Plan tasks</b> <span className="muted">· drag onto the clock{date === today ? '' : ` for ${fmtDateLong(date)}`}</span>
+        </span>
+        <input className="input sm plan-tray-search" placeholder="Find a task…" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Find a task to plan" />
+      </div>
+      {shown.length === 0 ? (
+        <p className="small muted">No open tasks match.</p>
+      ) : (
+        <ul className="plan-tray-list">
+          {shown.map((t) => {
+            const next = nextTimeframe(t.id, blocks, today, nowMin);
+            const start = suggestedStart(date, today, nowMin);
+            return (
+              <li key={t.id} className="plan-tray-item">
+                <button
+                  type="button"
+                  className="drag-handle"
+                  aria-label={`Drag “${t.title || 'Untitled task'}” onto the clock`}
+                  onPointerDown={(e) => beginTaskDrag(e, { id: t.id, title: t.title || 'Untitled task' })}
+                >
+                  <Icon name="grip" size={14} />
+                </button>
+                <button type="button" className="plan-tray-title" onClick={() => open({ kind: 'task', id: t.id })}>
+                  <span className="plan-tray-name">{t.title || 'Untitled task'}</span>
+                  <span className="small muted">
+                    {[t.projectId ? projectName.get(t.projectId) : null, next ? `next ${next.date === today ? 'today' : fmtDateShort(next.date)} ${fmtClock(next.start)}` : null]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="btn sm ghost"
+                  title="Choose a time without dragging"
+                  onClick={() =>
+                    open({
+                      kind: 'block',
+                      id: null,
+                      draft: { title: t.title, taskId: t.id, date, start, end: Math.min(1440, start + DEFAULT_TIMEFRAME_MINUTES) },
+                    })
+                  }
+                >
+                  <Icon name="plus" size={13} /> Plan
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {!q && candidates.length > 5 && (
+        <button className="link small" onClick={() => setExpanded(!expanded)}>
+          {expanded ? 'Show fewer' : `Show all ${candidates.length} open tasks`}
+        </button>
+      )}
+    </div>
   );
 }

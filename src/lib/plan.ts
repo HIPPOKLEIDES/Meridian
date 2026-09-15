@@ -1,6 +1,7 @@
 import type { AppData, DateKey, ID, Minutes, TimeBlock } from '../types';
 import { weekday } from './dates';
 import { isScheduled } from './habits';
+import { byId, taskArea } from './tasks';
 
 export interface PlanItem {
   key: string;
@@ -10,28 +11,38 @@ export interface PlanItem {
   start: Minutes;
   end: Minutes;
   areaId: ID | null;
-  /** Habits only. */
+  /** Habits: done today. Task timeframes: the task is done. */
   done?: boolean;
   repeating: boolean;
+  /** Set for a task's timeframe. */
+  taskId?: ID | null;
 }
 
 export const blockOccursOn = (b: TimeBlock, date: DateKey) =>
   b.repeatDays.length ? date >= b.date && b.repeatDays.includes(weekday(date)) : b.date === date;
 
-/** Everything planned on the day clock for a date: time blocks plus timed habits. */
-export function planForDate(data: Pick<AppData, 'blocks' | 'habits'>, date: DateKey): PlanItem[] {
+/**
+ * Everything planned on the day clock for a date: time blocks (including task timeframes) plus timed habits.
+ * With tasks and projects given, a timeframe shows its task's current title and area.
+ */
+export function planForDate(data: Pick<AppData, 'blocks' | 'habits'> & Partial<Pick<AppData, 'tasks' | 'projects'>>, date: DateKey): PlanItem[] {
   const items: PlanItem[] = [];
+  const tasks = data.tasks ? byId(data.tasks) : {};
+  const projects = data.projects ? byId(data.projects) : {};
   for (const b of data.blocks) {
     if (!blockOccursOn(b, date)) continue;
+    const task = b.taskId ? tasks[b.taskId] : undefined;
     items.push({
       key: `b:${b.id}`,
       kind: 'block',
       id: b.id,
-      title: b.title,
+      title: task?.title || b.title,
       start: b.start,
       end: b.end,
-      areaId: b.areaId,
+      areaId: b.areaId ?? (task ? taskArea(task, projects) : null),
       repeating: b.repeatDays.length > 0,
+      taskId: b.taskId,
+      done: task ? task.status === 'done' : undefined,
     });
   }
   for (const h of data.habits) {

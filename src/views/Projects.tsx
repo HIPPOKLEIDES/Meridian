@@ -11,6 +11,8 @@ import { NotesTab } from '../notes/NotesTab';
 import { useNotes } from '../notes/store';
 import { PlanSwitch } from '../goals/GoalsView';
 import { ShareButton } from '../cloud/ui/ShareDialog';
+import { TagFilter } from '../components/tags';
+import { hasTag, matchesTags, tagsInUse } from '../lib/tags';
 
 export function ProjectsView() {
   const projects = useStore((s) => s.projects);
@@ -112,6 +114,7 @@ export function ProjectDetail({ id, tab, sub }: { id: string; tab?: string; sub?
   const open = useUI((s) => s.open);
   const map = useMemo(() => byId(allTasks), [allTasks]);
   const [showDone, setShowDone] = useState(false);
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
 
   if (!project) {
     return (
@@ -125,8 +128,11 @@ export function ProjectDetail({ id, tab, sub }: { id: string; tab?: string; sub?
 
   const view = tab === 'flow' || tab === 'notes' ? tab : 'tasks';
   const tasks = allTasks.filter((t) => t.projectId === id).sort(compareTasks);
-  const openTasks = tasks.filter((t) => t.status !== 'done');
-  const doneTasks = tasks.filter((t) => t.status === 'done');
+  const projectTags = tagsInUse(tasks);
+  const activeFilter = tagFilter.filter((f) => hasTag(projectTags, f));
+  const filtered = tasks.filter((t) => matchesTags(t, activeFilter));
+  const openTasks = filtered.filter((t) => t.status !== 'done');
+  const doneTasks = filtered.filter((t) => t.status === 'done');
   const states = tasks.map((t) => flowState(t, map));
 
   return (
@@ -171,8 +177,9 @@ export function ProjectDetail({ id, tab, sub }: { id: string; tab?: string; sub?
         <>
           {project.description && <p className="notes">{project.description}</p>}
           <section className="card">
-            <QuickAddTask defaults={{ projectId: id }} placeholder="Add a task to this project" />
-            {openTasks.length === 0 && <Empty>No open tasks. Add one above.</Empty>}
+            <QuickAddTask defaults={{ projectId: id, tags: activeFilter }} placeholder="Add a task (use #tag to tag it)" />
+            <TagFilter tags={projectTags} selected={activeFilter} onChange={setTagFilter} />
+            {openTasks.length === 0 && <Empty>{activeFilter.length ? 'No open tasks with these tags.' : 'No open tasks. Add one above.'}</Empty>}
             {PRIORITIES.map((p) => {
               const items = openTasks.filter((t) => t.priority === p.id);
               if (!items.length) return null;

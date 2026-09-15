@@ -33,7 +33,14 @@ export function TasksView() {
     .filter((t) => (areaId ? taskArea(t, projectMap) === areaId : true))
     .filter((t) => {
       const q = query.trim().toLowerCase();
-      return !q || t.title.toLowerCase().includes(q) || t.notes.toLowerCase().includes(q) || t.subtasks.some((s) => s.text.toLowerCase().includes(q));
+      const tagQuery = q.replace(/^#/, '');
+      return (
+        !q ||
+        t.title.toLowerCase().includes(q) ||
+        t.notes.toLowerCase().includes(q) ||
+        t.subtasks.some((s) => s.text.toLowerCase().includes(q)) ||
+        (t.tags ?? []).some((tag) => tag.toLowerCase().includes(tagQuery))
+      );
     })
     .sort(compareTasks);
 
