@@ -289,3 +289,28 @@
     grid-column: 1 / -1;
   }
 }
+
+.check-list {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.check-list .tone {
+  white-space: normal;
+  align-items: flex-start;
+}
+.check-list .tone::before {
+  margin-top: 5px;
+  flex: none;
+}
+.connection-test {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sync-dot.tone-bad {
+  background: var(--critical);
+}

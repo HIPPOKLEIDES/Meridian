@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSession } from '../session';
-import { clearDeviceConfig, getCloudConfig, saveDeviceConfig } from '../config';
+import { clearDeviceConfig, getCloudConfig, readCloudConfig, saveDeviceConfig, testConnection, type Check } from '../config';
 import { signOutOfCloud, syncNow, useCloud } from '../controller';
 import { updateDisplayName, updatePassword } from '../auth';
 import { AuthForm } from './AuthForm';
@@ -34,7 +34,17 @@ export function AccountCard() {
       <h3 className="card-title">
         <Icon name="refresh" size={16} /> Account & sync
       </h3>
-      {status === 'disabled' ? <SetupForm /> : status === 'loading' ? <p className="small muted">Connecting…</p> : status === 'signedOut' ? <SignedOut /> : <SignedIn />}
+      {status === 'disabled' ? (
+        <SetupForm />
+      ) : status === 'loading' ? (
+        <p className="small muted">Connecting…</p>
+      ) : status === 'error' ? (
+        <ConnectionProblem />
+      ) : status === 'signedOut' ? (
+        <SignedOut />
+      ) : (
+        <SignedIn />
+      )}
       {config?.source === 'device' && (
         <button
           className="link small align-start"
@@ -89,9 +99,79 @@ function SignedOut() {
   return (
     <div className="stack tight">
       <p className="small muted">
-        Your data stays on this device either way. Signing in keeps a copy in your account, so you can use Meridian on your phone and share projects.
+        Your data stays on this device either way. Signing in keeps a copy in your account, so you can use Meridian on your phone and share projects. Sign in on each
+        device with the same account; things you made before signing in are offered for upload.
       </p>
       <AuthForm />
+      <ConnectionTest compact />
+    </div>
+  );
+}
+
+/** Shown when sync is configured but can't start. */
+function ConnectionProblem() {
+  const error = useSession((s) => s.error);
+  const { problemSource } = readCloudConfig();
+  const config = getCloudConfig();
+  return (
+    <div className="stack tight">
+      <p className="small tone tone-bad">{error ?? 'Couldn’t connect to the sync server.'}</p>
+      {problemSource === 'build' && (
+        <p className="small muted">
+          These settings come from the site’s build. In Netlify: Site configuration → Environment variables, check <code>VITE_SUPABASE_URL</code> (e.g.
+          https://abcd1234.supabase.co, no quotes) and <code>VITE_SUPABASE_ANON_KEY</code>, then Deploys → Trigger deploy → Clear cache and deploy site.
+        </p>
+      )}
+      {config && <ConnectionTest />}
+      <div className="row tight wrap">
+        <button className="btn sm" onClick={() => window.location.reload()}>
+          <Icon name="refresh" size={14} /> Try again
+        </button>
+      </div>
+      <details>
+        <summary className="small muted">Connect this device to a server manually</summary>
+        <SetupForm />
+      </details>
+    </div>
+  );
+}
+
+function ConnectionTest({ compact = false }: { compact?: boolean }) {
+  const [checks, setChecks] = useState<Check[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const config = getCloudConfig();
+  if (!config) return null;
+  return (
+    <div className={`connection-test${compact ? ' is-compact' : ''}`}>
+      <button
+        type="button"
+        className={compact ? 'link small align-start' : 'btn sm align-start'}
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            setChecks(await testConnection(config));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        {busy ? 'Testing…' : compact ? 'Having trouble? Test the connection' : 'Test connection'}
+      </button>
+      {checks && (
+        <ul className="check-list">
+          {checks.map((c) => (
+            <li key={c.label} className={`small tone ${c.ok ? 'tone-good' : 'tone-bad'}`}>
+              <span>
+                <b>{c.label}:</b> {c.detail}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="small muted">
+        Server: {new URL(config.url).host} ({config.source === 'build' ? 'from the site build' : 'set on this device'})
+      </p>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import type { Session } from '@supabase/supabase-js';
 import { getSupabase, toError } from './client';
+import { readCloudConfig } from './config';
 import { useSession, type SessionUser } from './session';
 
 /** Email + password accounts through Supabase Auth. */
@@ -14,14 +15,21 @@ function applySession(session: Session | null) {
   const current = useSession.getState();
   const same =
     current.user?.id === next?.id && current.user?.email === next?.email && current.user?.displayName === next?.displayName;
-  if (same && current.status !== 'loading') return;
-  useSession.setState({ status: next ? 'signedIn' : 'signedOut', user: next });
+  if (same && (current.status === 'signedIn' || current.status === 'signedOut')) return;
+  useSession.setState({ status: next ? 'signedIn' : 'signedOut', user: next, error: null });
 }
 
+const SESSION_TIMEOUT_MS = 12_000;
+
 export async function initAuth() {
+  const { config, problem } = readCloudConfig();
+  if (!config) {
+    useSession.setState(problem ? { status: 'error', user: null, error: problem } : { status: 'disabled', user: null, error: null });
+    return;
+  }
   const sb = getSupabase();
   if (!sb) {
-    useSession.setState({ status: 'disabled', user: null });
+    useSession.setState({ status: 'error', user: null, error: 'The Supabase settings couldn’t be used. Check the Project URL and anon key.' });
     return;
   }
   sb.auth.onAuthStateChange((event, session) => {
@@ -29,8 +37,19 @@ export async function initAuth() {
     if (event === 'PASSWORD_RECOVERY') useSession.setState({ recovery: true });
     applySession(session);
   });
-  const { data } = await sb.auth.getSession();
-  applySession(data.session);
+  try {
+    const result = await Promise.race([
+      sb.auth.getSession(),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), SESSION_TIMEOUT_MS)),
+    ]);
+    if (result.error) throw result.error;
+    applySession(result.data.session);
+  } catch (e) {
+    // If the session shows up later, onAuthStateChange replaces this error.
+    if (useSession.getState().status !== 'loading') return;
+    const message = e instanceof Error && e.message !== 'timeout' ? e.message : `Couldn’t reach ${new URL(config.url).host}.`;
+    useSession.setState({ status: 'error', error: `${message} Use “Test connection” below to find out why.` });
+  }
 }
 
 const friendly = (message: string) => {

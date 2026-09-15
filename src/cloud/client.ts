@@ -1,17 +1,22 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { getCloudConfig } from './config';
+import { readCloudConfig } from './config';
 
 let client: SupabaseClient | null | undefined;
 
-/** The Supabase client, or null when cloud sync isn't configured. */
+/** The Supabase client, or null when cloud sync isn't configured (or the config can't be used). */
 export function getSupabase(): SupabaseClient | null {
   if (client === undefined) {
-    const config = getCloudConfig();
-    client = config
-      ? createClient(config.url, config.anonKey, {
-          auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: 'meridian:auth' },
-        })
-      : null;
+    const { config } = readCloudConfig();
+    try {
+      client = config
+        ? createClient(config.url, config.anonKey, {
+            auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: 'meridian:auth' },
+          })
+        : null;
+    } catch (e) {
+      console.error('Couldn’t create the Supabase client', e);
+      client = null;
+    }
   }
   return client;
 }

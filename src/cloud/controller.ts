@@ -103,7 +103,12 @@ async function hasLocalData() {
 }
 
 export async function startCloud() {
-  await initAuth();
+  try {
+    await initAuth();
+  } catch (e) {
+    console.error('Cloud sync couldn’t start', e);
+    useSession.setState({ status: 'error', error: e instanceof Error ? e.message : 'Cloud sync couldn’t start.' });
+  }
   useSession.subscribe((state, prev) => {
     if (state.user?.id !== prev.user?.id) queueUserChange(state.user);
   });

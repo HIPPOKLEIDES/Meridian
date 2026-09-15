@@ -10,6 +10,18 @@ export function SyncIndicator() {
   const user = useSession((s) => s.user);
   const cloud = useCloud();
   if (status === 'disabled' || status === 'loading') return null;
+  if (status === 'error') {
+    return (
+      <button className="sync-indicator" onClick={() => navigate('settings')} title="Sync can’t connect. Open Settings for details.">
+        <span className="sync-dot tone-bad" />
+        <span className="sync-indicator-text">
+          <span className="sync-indicator-status tone-bad">
+            <span className="sync-dot" /> Sync can’t connect
+          </span>
+        </span>
+      </button>
+    );
+  }
   if (!user) {
     return (
       <button className="sync-indicator" onClick={() => navigate('settings')}>

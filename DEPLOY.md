@@ -42,11 +42,11 @@ Setup takes about 20 minutes and nothing needs installing beyond what's already 
 5. **Email delivery.** Supabase's built-in mailer is for testing only: it sends just a few emails per hour.
    - Before inviting friends, connect your own SMTP provider under **Authentication → Emails → SMTP settings**. [Resend](https://resend.com)'s free tier works well.
    - Otherwise sign-up confirmations and password resets may not arrive.
-6. Under **Project Settings → API** (or **API Keys**), copy:
-   - the **Project URL**,
-   - the **anon** (or **publishable**) key.
+6. Get the two values Meridian needs:
+   - **Project URL:** `https://<project-ref>.supabase.co`. The project ref is the code at the end of the dashboard address (`supabase.com/dashboard/project/<project-ref>`), also shown under **Project Settings → General → Project ID**. Depending on the dashboard version, the full URL may also appear under the **Connect** button or **Project Settings → Data API**.
+   - **Key:** **Project Settings → API Keys**. Use the **publishable** key (`sb_publishable_…`) or the **anon** key under "Legacy API keys".
 
-   The anon key is meant to be public; the security rules protect the data. **Never** use the `service_role` / secret key in the app.
+   The publishable/anon key is meant to be public; the security rules protect the data. **Never** use the secret / `service_role` key in the app.
 
 ## 2. Try it locally (optional)
 
@@ -89,6 +89,13 @@ The app is static files built into `dist/`. Set the two environment variables, t
 Cloudflare Pages and Vercel work the same way: build command `npm run build`, output `dist`, and the same two variables.
 
 Then go back to Supabase step 1.4 and enter the site's address (e.g. `https://meridian-phil.netlify.app`).
+
+**If Settings → Account & sync says it can't connect** (or older versions stayed on "Connecting…"):
+
+1. Check the variables. Paste values without quotes: the URL is `https://<ref>.supabase.co`, not the dashboard link or the `postgresql://` connection string. The key is the anon / publishable one.
+2. Variables are read at **build** time, so after changing them run Deploys → **Trigger deploy → Clear cache and deploy site**.
+3. Use **Test connection** in Settings. It checks the address, the key, email sign-in and whether `schema.sql` has been run.
+4. Netlify's **password / visitor protection** (Site configuration → Access & security) makes visitors log in to Netlify first. Turn it off so your phone and friends can reach the app; Meridian's own accounts protect the data.
 
 ## 4. Your phone
 
