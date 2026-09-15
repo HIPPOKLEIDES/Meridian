@@ -1,0 +1,4 @@
+node_modules
+dist
+.dev-supabase
+.env.local

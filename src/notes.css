@@ -1,0 +1,751 @@
+/* Project notes: tree, markdown pages and flowmap boards. */
+
+.pixelated {
+  image-rendering: pixelated;
+}
+
+.notes-layout {
+  display: grid;
+  grid-template-columns: 260px minmax(0, 1fr);
+  height: calc(100vh - 190px);
+  min-height: 520px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+/* ───────── Tree ───────── */
+.notes-tree {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-2) 45%, var(--surface));
+}
+.notes-tree-head {
+  display: flex;
+  gap: 6px;
+  padding: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.notes-tree-head .input {
+  flex: 1;
+}
+.tree-body,
+.tree-results {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 6px 12px;
+}
+.tree-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-height: 30px;
+  padding: 3px 6px;
+  border-radius: 7px;
+  cursor: pointer;
+  color: var(--ink-2);
+  font-size: 13px;
+  text-align: left;
+  user-select: none;
+}
+.tree-row:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.tree-row.is-active {
+  background: var(--surface-2);
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: inset 2px 0 0 var(--ink);
+}
+.tree-row.kind-folder,
+.tree-row.kind-section {
+  font-weight: 600;
+  color: var(--ink);
+}
+.tree-row.kind-section {
+  margin-top: 2px;
+}
+.tree-row.is-dragging {
+  opacity: 0.45;
+}
+.tree-row.drop-inside {
+  background: color-mix(in srgb, var(--series-1) 16%, var(--surface));
+  box-shadow: inset 0 0 0 1.5px var(--series-1);
+}
+.tree-row.drop-before::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--series-1);
+}
+.tree-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--muted);
+}
+.tree-chevron svg {
+  transition: transform 0.12s;
+}
+.tree-chevron.is-open svg {
+  transform: rotate(90deg);
+}
+.tree-icon {
+  flex: none;
+  color: var(--muted);
+}
+.tree-section-dot {
+  width: 10px;
+  height: 10px;
+  margin: 0 2px;
+  border-radius: 3px;
+  flex: none;
+  background: var(--section, var(--axis));
+}
+.tree-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tree-path {
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tree-actions {
+  display: none;
+}
+.tree-row:hover .tree-actions,
+.tree-row.is-active .tree-actions {
+  display: inline-flex;
+}
+.tree-actions .tree-menu-btn {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 5px;
+  color: var(--ink-2);
+}
+.tree-actions .tree-menu-btn:hover {
+  background: var(--border);
+}
+.tree-menu {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  margin: 2px 8px 6px 28px;
+  padding: 4px;
+  border-radius: 9px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-pop);
+}
+.notes-tree-head + .tree-menu {
+  margin: 0 10px 6px;
+}
+.tree-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  text-align: left;
+}
+.tree-menu button:hover {
+  background: var(--surface-2);
+}
+.tree-rename {
+  flex: 1;
+  min-width: 0;
+}
+body.is-dragging-note,
+body.is-dragging-note * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}
+.tree-drag-ghost {
+  position: fixed;
+  z-index: 100;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 280px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-pop);
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tree-root-drop {
+  margin: 8px 4px;
+  padding: 10px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+.tree-root-drop.is-over {
+  border-color: var(--series-1);
+  color: var(--ink);
+}
+.tree-empty {
+  padding: 8px;
+}
+.tree-tip {
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* ───────── Content ───────── */
+.notes-content {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+.notes-home {
+  padding: 24px;
+  max-width: 760px;
+}
+.notes-home code {
+  font-size: 0.9em;
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.note-view {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+.note-view.is-folder,
+.note-view.is-section {
+  padding-bottom: 24px;
+}
+.note-view.is-folder > .stack,
+.note-view.is-section > .stack {
+  padding: 0 24px;
+}
+.note-view.is-board {
+  height: 100%;
+}
+.note-head {
+  padding: 14px 24px 8px;
+}
+.note-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+.note-crumbs .link-plain {
+  font-weight: 400;
+}
+.note-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.note-title {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: 650 26px/1.2 var(--font);
+  letter-spacing: -0.02em;
+  padding: 2px 0;
+}
+.note-title:focus {
+  outline: none;
+  box-shadow: 0 2px 0 var(--axis);
+}
+.note-children {
+  display: flex;
+  flex-direction: column;
+}
+.note-child {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 8px;
+  border-bottom: 1px solid var(--grid);
+  text-align: left;
+}
+.note-child:hover {
+  background: var(--surface-2);
+}
+.note-child svg {
+  color: var(--muted);
+}
+.note-child-title {
+  flex: 1;
+  font-weight: 550;
+}
+
+/* ───────── Markdown page ───────── */
+.note-page {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.note-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 8px 24px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.md-buttons {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-wrap: wrap;
+}
+.md-buttons .btn {
+  min-width: 28px;
+}
+.note-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 24px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+.note-picker .chip {
+  cursor: pointer;
+  padding-right: 9px;
+}
+.note-body {
+  display: grid;
+  flex: 1;
+  min-height: 420px;
+}
+.note-body.is-split {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.note-source {
+  width: 100%;
+  min-height: 100%;
+  resize: none;
+  border: 0;
+  border-right: 1px solid var(--border);
+  padding: 18px 24px;
+  background: var(--surface);
+  color: var(--ink);
+  font: 13.5px/1.65 ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  tab-size: 2;
+}
+.note-source:focus {
+  outline: none;
+}
+.note-body.is-edit .note-source {
+  border-right: 0;
+  max-width: 900px;
+}
+.note-preview {
+  padding: 18px 28px 40px;
+  min-width: 0;
+}
+.note-body.is-preview .note-preview {
+  max-width: 860px;
+}
+.backlinks {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 10px 24px;
+  border-top: 1px solid var(--border);
+}
+.backlinks .chip {
+  cursor: pointer;
+  padding-right: 9px;
+}
+
+/* ───────── Board ───────── */
+.board-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 420px;
+  border-top: 1px solid var(--border);
+}
+.board-wrap .react-flow {
+  --xy-background-color: var(--surface);
+  --xy-background-color-default: var(--surface);
+  --xy-background-pattern-dots-color-default: var(--axis);
+  --xy-edge-stroke-default: var(--ink-2);
+  --xy-edge-stroke-width-default: 1.75;
+  --xy-edge-stroke-selected-default: var(--series-1);
+  --xy-edge-label-background-color-default: var(--surface);
+  --xy-edge-label-color-default: var(--ink-2);
+  --xy-connectionline-stroke-default: var(--ink-2);
+  --xy-controls-button-background-color-default: var(--surface);
+  --xy-controls-button-background-color-hover-default: var(--surface-2);
+  --xy-controls-button-color-default: var(--ink);
+  --xy-controls-button-border-color-default: var(--border);
+  --xy-minimap-background-color-default: var(--surface);
+  --xy-minimap-mask-background-color-default: color-mix(in srgb, var(--surface-2) 70%, transparent);
+  font-family: var(--font);
+}
+.board-wrap .react-flow__edge-textbg {
+  rx: 4;
+}
+.board-wrap .react-flow__edge-text {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.board-card {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: inset 0 3px 0 var(--card), var(--shadow);
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.board-card.is-selected {
+  outline: 2px solid var(--series-1);
+  outline-offset: 2px;
+}
+.board-card-cover {
+  width: 100%;
+  height: 96px;
+  object-fit: cover;
+  background: var(--surface-2);
+  flex: none;
+}
+.board-card-cover.pixelated {
+  object-fit: contain;
+}
+.board-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 10px 4px;
+  font-size: 13.5px;
+  line-height: 1.25;
+}
+.board-card-head b {
+  overflow-wrap: anywhere;
+}
+.board-card-icon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  flex: none;
+  border-radius: 4px;
+  background: var(--surface-2);
+}
+.board-card-body {
+  padding: 0 10px 8px;
+  color: var(--ink-2);
+  overflow: hidden;
+  line-height: 1.45;
+}
+.board-card-body p,
+.board-card-body ul {
+  margin: 0 0 4px;
+}
+.board-card-body ul {
+  padding-left: 16px;
+}
+.board-card-body a {
+  color: var(--series-1);
+}
+.board-card-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 8px 8px;
+  margin-top: auto;
+}
+.board-note-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.board-note-chip:hover {
+  color: var(--ink);
+  border-color: var(--border-strong);
+}
+.board-image {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.board-image img {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  object-fit: contain;
+}
+.board-image.is-selected {
+  outline: 2px solid var(--series-1);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.board-image figcaption {
+  font-size: 11.5px;
+  text-align: center;
+  color: var(--ink-2);
+  padding-top: 2px;
+}
+.board-image-missing {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px dashed var(--axis);
+  border-radius: 6px;
+}
+.board-frame {
+  width: 100%;
+  height: 100%;
+  border-radius: 14px;
+  border: 1.5px dashed color-mix(in srgb, var(--card) 70%, transparent);
+  background: color-mix(in srgb, var(--card) 7%, transparent);
+}
+.board-frame.is-selected {
+  border-style: solid;
+  border-color: var(--series-1);
+}
+.board-frame-title {
+  display: inline-block;
+  margin: 8px 12px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--ink);
+}
+/* Connection dots sit at each side's midpoint, above the resize strips. */
+.board-handle.react-flow__handle {
+  z-index: 6;
+  width: 11px;
+  height: 11px;
+  background: var(--surface);
+  border: 2px solid var(--ink-2);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.board-handle.react-flow__handle:hover {
+  background: var(--series-1);
+  border-color: var(--series-1);
+}
+.react-flow__node:hover .board-handle.react-flow__handle,
+.react-flow__node.selected .board-handle.react-flow__handle,
+.board-wrap .react-flow.connecting .board-handle {
+  opacity: 1;
+}
+
+/* Resizing: an invisible strip straddles every edge (half inside, half outside), with a thin highlight on
+   hover. The strip is about 14px on screen whatever the zoom (--inv-zoom), capped so the middle of a card
+   always stays free for dragging. */
+.board-wrap {
+  --strip: clamp(10px, calc(14px * var(--inv-zoom, 1)), 36px);
+}
+.board-wrap .board-resize-line.react-flow__resize-control.line {
+  z-index: 4;
+  border: 0;
+  background: transparent;
+}
+.board-wrap .board-resize-line.react-flow__resize-control.line.left,
+.board-wrap .board-resize-line.react-flow__resize-control.line.right {
+  width: var(--strip);
+}
+.board-wrap .board-resize-line.react-flow__resize-control.line.top,
+.board-wrap .board-resize-line.react-flow__resize-control.line.bottom {
+  height: var(--strip);
+}
+.board-resize-line::after {
+  content: '';
+  position: absolute;
+  background: var(--series-1);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.board-resize-line.left::after,
+.board-resize-line.right::after {
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 1px * var(--inv-zoom, 1));
+  width: calc(2px * var(--inv-zoom, 1));
+}
+.board-resize-line.top::after,
+.board-resize-line.bottom::after {
+  left: 0;
+  right: 0;
+  top: calc(50% - 1px * var(--inv-zoom, 1));
+  height: calc(2px * var(--inv-zoom, 1));
+}
+.board-resize-line:hover::after {
+  opacity: 1;
+}
+.react-flow__node.selected .board-resize-line::after {
+  opacity: 0.45;
+}
+.board-wrap .board-resize-handle.react-flow__resize-control.handle {
+  z-index: 5;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+.board-resize-handle::after {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border-radius: 2px;
+  background: var(--surface);
+  border: 1.5px solid var(--series-1);
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.react-flow__node:hover .board-resize-handle::after,
+.react-flow__node.selected .board-resize-handle::after {
+  opacity: 1;
+}
+.board-minimap {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.board-inspector {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 6;
+  width: 290px;
+  max-width: calc(100% - 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: var(--shadow-pop);
+}
+.board-inspector h4 {
+  margin: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.board-inspector .field .input {
+  width: 100%;
+}
+.board-inspector .chips .chip .link-plain {
+  max-width: 180px;
+}
+.title-input.sm-title {
+  font-size: 15px;
+  height: 36px;
+}
+.inspector-image {
+  max-width: 100%;
+  max-height: 140px;
+  align-self: flex-start;
+  object-fit: contain;
+  border-radius: 6px;
+  background: var(--surface-2);
+}
+.inspector-image.pixelated {
+  width: 64px;
+  height: 64px;
+}
+.swatch-btn.is-none {
+  background: var(--surface) linear-gradient(135deg, transparent 45%, var(--critical) 45%, var(--critical) 55%, transparent 55%);
+  border: 1px solid var(--border-strong);
+}
+.board-empty {
+  max-width: 560px;
+}
+
+@media (max-width: 860px) {
+  .notes-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    height: auto;
+  }
+  .notes-tree {
+    max-height: 260px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .note-body.is-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .note-source {
+    min-height: 320px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .board-wrap {
+    min-height: 520px;
+  }
+}
