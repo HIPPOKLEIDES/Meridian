@@ -2537,3 +2537,28 @@ button.side-nudge {
     opacity: 1;
   }
 }
+
+/* Something scheduled that takes no time: a mark across the ring instead of an arc. */
+.clock-moment-tick {
+  stroke-width: 2;
+  opacity: 0.5;
+}
+.clock-moment-dot {
+  stroke: var(--surface);
+  stroke-width: 1.5;
+  transition: opacity 0.15s;
+}
+.clock-moment:hover .clock-moment-dot {
+  opacity: 0.82;
+}
+.clock-moment.is-pending .clock-moment-dot {
+  fill: var(--surface);
+  stroke: currentColor;
+}
+.clock-moment.is-done .clock-moment-dot,
+.clock-moment.is-done .clock-moment-tick {
+  opacity: 0.55;
+}
+.clock-moment.is-editing .clock-moment-dot {
+  stroke: var(--ink);
+}

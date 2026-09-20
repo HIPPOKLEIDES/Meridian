@@ -196,7 +196,7 @@ export function DayClock({ date }: { date: DateKey }) {
     svgRef.current!.setPointerCapture(e.pointerId);
     const m = unwrap(toMinute(e), (arc.start + arc.end) / 2);
     const tol = edgeTolerance(arc.end - arc.start);
-    const mode = m - arc.start < tol ? 'start' : arc.end - m < tol ? 'end' : 'move';
+    const mode = arc.end <= arc.start ? 'move' : m - arc.start < tol ? 'start' : arc.end - m < tol ? 'end' : 'move';
     setHover(null);
     setEdit({ id: arc.id, mode, grab: m, last: m, orig: { start: arc.start, end: arc.end }, start: arc.start, end: arc.end, repeating: !!arc.repeating });
   };
@@ -270,7 +270,7 @@ export function DayClock({ date }: { date: DateKey }) {
     if (drag || edit) return;
     const rect = wrapRef.current!.getBoundingClientRect();
     let edge: 'start' | 'end' | null = null;
-    if (arc.kind === 'block') {
+    if (arc.kind === 'block' && arc.end > arc.start) {
       const m = unwrap(toMinute(e), (arc.start + arc.end) / 2);
       const tol = edgeTolerance(arc.end - arc.start);
       edge = m - arc.start < tol ? 'start' : arc.end - m < tol ? 'end' : null;
@@ -286,6 +286,7 @@ export function DayClock({ date }: { date: DateKey }) {
 
   const renderArc = (arc: Arc) => {
     const ring = arc.ring === 'plan' ? PLAN : LOG;
+    if (arc.end <= arc.start) return renderMoment(arc, ring);
     const laneW = (ring.r1 - ring.r0 - GAP_PX * (arc.lanes - 1)) / arc.lanes;
     let r1 = ring.r1 - arc.lane * (laneW + GAP_PX);
     let r0 = r1 - laneW;
@@ -332,6 +333,35 @@ export function DayClock({ date }: { date: DateKey }) {
             </text>
           </>
         )}
+      </g>
+    );
+  };
+
+  // Something that takes no time (a glass of water, a pill): a dot on the ring at that minute.
+  const renderMoment = (arc: Arc, ring: { r0: number; r1: number }) => {
+    const fill = arc.slot ? `var(--series-${arc.slot})` : 'var(--unassigned)';
+    const rMid = (ring.r0 + ring.r1) / 2;
+    const [x, y] = polar(rMid, arc.start);
+    const [ix, iy] = polar(ring.r0 + 2, arc.start);
+    const [ox, oy] = polar(ring.r1 - 2, arc.start);
+    const editable = arc.kind === 'block';
+    return (
+      <g
+        key={arc.key}
+        className={`clock-arc clock-moment${arc.pending ? ' is-pending' : ''}${editable ? ' is-editable' : ''}${edit?.id === arc.id ? ' is-editing' : ''}${
+          arc.done ? ' is-done' : ''
+        }`}
+        color={fill}
+        onPointerMove={(e) => showHover(arc, e)}
+        onPointerLeave={() => setHover(null)}
+        onPointerDown={editable ? beginEdit(arc) : undefined}
+        onClick={editable ? undefined : () => openArc(arc)}
+        role={arc.id ? 'button' : undefined}
+        aria-label={`${arc.title}, at ${fmtClock(arc.start)}, takes no time`}
+      >
+        <line x1={ix} y1={iy} x2={ox} y2={oy} stroke={fill} className="clock-moment-tick" />
+        <circle cx={x} cy={y} r={5} fill={fill} className="clock-moment-dot" />
+        <circle cx={x} cy={y} r={11} fill="transparent" />
       </g>
     );
   };
@@ -418,10 +448,10 @@ export function DayClock({ date }: { date: DateKey }) {
           ) : edit ? (
             <>
               <text x={C} y={C - 10} textAnchor="middle" className="clock-big">
-                {fmtClock(edit.start)}–{fmtClock(edit.end)}
+                {edit.end > edit.start ? `${fmtClock(edit.start)}–${fmtClock(edit.end)}` : fmtClock(edit.start)}
               </text>
               <text x={C} y={C + 22} textAnchor="middle" className="clock-sub">
-                {edit.mode === 'move' ? 'Move' : 'Resize'} · {fmtDuration(edit.end - edit.start)}
+                {edit.mode === 'move' ? 'Move' : 'Resize'} · {edit.end > edit.start ? fmtDuration(edit.end - edit.start) : 'no time'}
               </text>
             </>
           ) : dragArc ? (
@@ -470,7 +500,13 @@ export function DayClock({ date }: { date: DateKey }) {
           </div>
           {hover.arc.parentTitle && <div className="tooltip-row muted">Part of {hover.arc.parentTitle}</div>}
           <div className="tooltip-row">
-            {fmtClock(hover.arc.start)}–{fmtClock(hover.arc.end)} · {fmtDuration(hover.arc.end - hover.arc.start)}
+            {hover.arc.end > hover.arc.start ? (
+              <>
+                {fmtClock(hover.arc.start)}–{fmtClock(hover.arc.end)} · {fmtDuration(hover.arc.end - hover.arc.start)}
+              </>
+            ) : (
+              <>{fmtClock(hover.arc.start)} · takes no time</>
+            )}
           </div>
           <div className="tooltip-row muted">
             {hover.arc.kind === 'habit'

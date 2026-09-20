@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newBlock, newHabit, newTask } from '../store';
-import { planForDate } from './plan';
+import { isMoment, planForDate } from './plan';
 
 const DATE = '2026-09-21'; // a Monday
 
@@ -45,6 +45,22 @@ describe('the day plan', () => {
     expect(items[0]).toMatchObject({ kind: 'habit', id: habit.id, stepId: 'w', parentTitle: 'Morning run', done: true, end: 7 * 60 + 10 });
     // No duration of its own: the default length.
     expect(items[1].end - items[1].start).toBe(10);
+  });
+
+  it('keeps zero-length things at zero, for what takes no time', () => {
+    const habit = newHabit({
+      title: 'Drink water',
+      start: 10 * 60,
+      duration: 0,
+      startDate: '2026-01-01',
+      steps: [{ id: 'g2', text: 'Second glass', start: 14 * 60, duration: 0 }],
+    });
+    const items = planForDate({ blocks: [], habits: [habit], tasks: [], projects: [] }, DATE);
+    expect(items.map((i) => [i.title, i.start, i.end])).toEqual([
+      ['Drink water', 600, 600],
+      ['Second glass', 840, 840],
+    ]);
+    expect(items.every(isMoment)).toBe(true);
   });
 
   it('leaves out steps of a habit that is not scheduled that day', () => {

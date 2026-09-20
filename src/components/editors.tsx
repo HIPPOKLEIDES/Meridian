@@ -67,7 +67,8 @@ function TaskEditor({ id, draft }: { id: ID | null; draft?: Partial<Task> }) {
     const start = suggestedStart(date, today, nowMinutes(new Date()));
     setFrames((prev) => [...prev, { id: uid(), date, start, end: Math.min(1440, start + DEFAULT_TIMEFRAME_MINUTES), repeatDays: [], subtaskId, isNew: true }]);
   };
-  const framesValid = frames.every((f) => f.end > f.start);
+  // A timeframe may be a moment (end === start), for something that takes no time.
+  const framesValid = frames.every((f) => f.end >= f.start);
   // Suggest the project's own tags first, then tags used anywhere else.
   const tagSuggestions = useMemo(() => {
     const inProject = t.projectId ? tagsInUse(store.tasks.filter((x) => x.projectId === t.projectId)) : [];
@@ -394,7 +395,8 @@ function TimeframesField({
                 </select>
               )}
               {f.repeatDays.length > 0 && <span className="small muted">Repeats {describeRepeat(f.repeatDays)}</span>}
-              {f.end <= f.start && <span className="small tone tone-bad">Must end after it starts</span>}
+              {f.end < f.start && <span className="small tone tone-bad">Must end after it starts</span>}
+              {f.end === f.start && <span className="small muted">Takes no time — a mark on the clock</span>}
             </li>
           ))}
         </ul>
@@ -495,10 +497,14 @@ function HabitEditor({ id, draft }: { id: ID | null; draft?: Partial<Habit> }) {
             <DateInput value={h.startDate} onChange={(d) => set({ startDate: d ?? todayKey() })} />
           </Field>
         </div>
-        <label className="toggle">
-          <input type="checkbox" checked={h.logTime} onChange={(e) => set({ logTime: e.target.checked })} />
-          Log {fmtDuration(h.duration)} to its area each time it's checked off
-        </label>
+        {h.duration > 0 ? (
+          <label className="toggle">
+            <input type="checkbox" checked={h.logTime} onChange={(e) => set({ logTime: e.target.checked })} />
+            Log {fmtDuration(h.duration)} to its area each time it's checked off
+          </label>
+        ) : (
+          <p className="small muted">A duration of 0 means it takes no time — a glass of water, a pill. It shows as a mark on the day clock and nothing is logged to its area.</p>
+        )}
         <Field
           label="Steps"
           hint={`Checking every step completes the habit for the day. Give a step a time and it gets its own place on the day clock, ${describeRepeat(h.days)}.`}
@@ -552,7 +558,8 @@ function BlockEditor({ id, draft, on }: { id: ID | null; draft?: Partial<TimeBlo
   const projects = byId(store.projects);
   if (id && !existing) return null;
 
-  const valid = b.end > b.start;
+  const valid = b.end >= b.start;
+  const moment = b.end === b.start;
   const linkedSubtasks = (b.taskId ? store.tasks.find((t) => t.id === b.taskId)?.subtasks : undefined) ?? [];
   const save = () => {
     if (!valid) return;
@@ -579,7 +586,7 @@ function BlockEditor({ id, draft, on }: { id: ID | null; draft?: Partial<TimeBlo
               <Icon name="trash" /> Delete
             </button>
           )}
-          {existing && (
+          {existing && !moment && (
             <button
               className="btn ghost"
               title="Record this block as time actually spent"
@@ -630,6 +637,7 @@ function BlockEditor({ id, draft, on }: { id: ID | null; draft?: Partial<TimeBlo
           </Field>
         </div>
         {!valid && <div className="notice">The block must end after it starts (it can't cross midnight).</div>}
+        {moment && <div className="notice">Same start and end: this marks the moment on the clock, for something that takes no time.</div>}
         <Field label="Repeat on" hint={b.repeatDays.length ? 'Edits apply to every occurrence.' : 'Leave empty for a one-off block.'}>
           <DayPicker days={b.repeatDays} onChange={(repeatDays) => set({ repeatDays })} />
         </Field>

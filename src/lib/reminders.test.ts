@@ -41,6 +41,11 @@ describe('reminders', () => {
     expect(dueReminders([pending], DATE, 6 * 60 + 56, 10, new Set([first.key]))).toEqual([]);
   });
 
+  it('names a single time for something that takes no time', () => {
+    const water = item({ key: 'h:1:g1', kind: 'habit', title: 'Glass of water', parentTitle: 'Drink water', start: 10 * 60, end: 10 * 60 });
+    expect(dueReminders([water], DATE, 9 * 60 + 55, 10, none)[0].body).toBe('In 5 min · 10:00 · Drink water');
+  });
+
   it('names what a subtask or habit step belongs to, soonest first', () => {
     const items = [
       item({ key: 'b:2', title: 'Sand the edges', parentTitle: 'Build the shelf', start: 9 * 60 + 30 }),

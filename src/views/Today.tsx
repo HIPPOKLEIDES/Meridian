@@ -157,7 +157,8 @@ function HabitDueRow({ habit, date }: { habit: Habit; date: DateKey }) {
           <span className="habit-row-title">{habit.title}</span>
           <span className="habit-row-meta">
             <AreaDot areaId={habit.areaId} />
-            {habit.start === null ? 'Any time' : fmtClock(habit.start)} · {fmtDuration(habit.duration)}
+            {habit.start === null ? 'Any time' : fmtClock(habit.start)}
+            {habit.duration > 0 && ` · ${fmtDuration(habit.duration)}`}
           </span>
         </button>
         {streak > 1 && (

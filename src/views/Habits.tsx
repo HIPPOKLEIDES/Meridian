@@ -109,7 +109,8 @@ function HabitDetail({ habit, today }: { habit: Habit; today: string }) {
         <div>
           <h2 className="detail-title">{habit.title}</h2>
           <div className="detail-meta">
-            {fmtDays(habit.days)} · {habit.start === null ? 'Any time' : fmtClock(habit.start)} · {fmtDuration(habit.duration)}
+            {fmtDays(habit.days)} · {habit.start === null ? 'Any time' : fmtClock(habit.start)}
+            {habit.duration > 0 && ` · ${fmtDuration(habit.duration)}`}
             <AreaTag areaId={habit.areaId} />
           </div>
         </div>

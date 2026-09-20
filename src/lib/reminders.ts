@@ -38,7 +38,7 @@ export function dueReminders(items: PlanItem[], date: DateKey, nowMin: Minutes, 
     const key = `${date}:${item.key}:${item.start}`;
     if (fired.has(key)) continue;
     const when = minutesAway <= 0 ? 'Starting now' : `In ${minutesAway} min`;
-    const span = `${fmtClock(item.start)}–${fmtClock(item.end)}`;
+    const span = item.end > item.start ? `${fmtClock(item.start)}–${fmtClock(item.end)}` : fmtClock(item.start);
     out.push({
       key,
       title: item.title || (item.kind === 'habit' ? 'Habit' : 'Planned time'),

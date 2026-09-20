@@ -92,7 +92,10 @@ export function StepList({
   const nextStart = (index: number) => {
     for (let i = index - 1; i >= 0; i--) {
       const prev = steps[i];
-      if (prev.start !== null && prev.start !== undefined) return Math.min(1435, prev.start + Math.max(5, prev.duration ?? HABIT_STEP_MINUTES));
+      if (prev.start === null || prev.start === undefined) continue;
+      // A step that takes no time still needs the next one to land somewhere else.
+      const gap = prev.duration ?? HABIT_STEP_MINUTES;
+      return Math.min(1435, prev.start + (gap > 0 ? gap : 15));
     }
     return defaultStart ?? 7 * 60;
   };
@@ -118,11 +121,12 @@ export function StepList({
               <input
                 className="input sm step-minutes"
                 type="number"
-                min={5}
+                min={0}
                 step={5}
                 aria-label={`Minutes for “${step.text}”`}
+                title="0 minutes marks the moment on the clock"
                 value={step.duration ?? HABIT_STEP_MINUTES}
-                onChange={(e) => patch(step.id, { duration: Math.max(5, Number(e.target.value) || 5) })}
+                onChange={(e) => patch(step.id, { duration: Math.max(0, Number(e.target.value) || 0) })}
               />
               <span className="muted small step-min-label">min</span>
               <button

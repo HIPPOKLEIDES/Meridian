@@ -27,6 +27,9 @@ export interface PlanItem {
 /** How long a habit step is assumed to take when it has a time but no duration of its own. */
 export const HABIT_STEP_MINUTES = 10;
 
+/** Something scheduled that takes no time: a glass of water, a pill, a text message. */
+export const isMoment = (item: { start: Minutes; end: Minutes }) => item.end <= item.start;
+
 export const blockOccursOn = (b: TimeBlock, date: DateKey) =>
   b.repeatDays.length ? date >= b.date && b.repeatDays.includes(weekday(date)) : b.date === date;
 
@@ -67,7 +70,7 @@ export function planForDate(data: Pick<AppData, 'blocks' | 'habits'> & Partial<P
         id: h.id,
         title: h.title,
         start: h.start,
-        end: Math.min(1440, h.start + Math.max(5, h.duration)),
+        end: Math.min(1440, h.start + Math.max(0, h.duration)),
         areaId: h.areaId,
         done: !!h.log[date]?.done,
         repeating: true,
@@ -84,7 +87,7 @@ export function planForDate(data: Pick<AppData, 'blocks' | 'habits'> & Partial<P
         parentTitle: h.title,
         stepId: step.id,
         start: step.start,
-        end: Math.min(1440, step.start + Math.max(5, step.duration ?? HABIT_STEP_MINUTES)),
+        end: Math.min(1440, step.start + Math.max(0, step.duration ?? HABIT_STEP_MINUTES)),
         areaId: h.areaId,
         done: !!h.log[date]?.steps.includes(step.id) || !!h.log[date]?.done,
         repeating: true,
