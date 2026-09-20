@@ -767,6 +767,12 @@ textarea.input {
   align-items: center;
   gap: 6px;
   padding-left: 2px;
+  /* A step's time controls drop to their own line when the row runs out of width. */
+  flex-wrap: wrap;
+}
+.checklist-item > .input.bare {
+  flex: 1 1 120px;
+  min-width: 0;
 }
 .checklist-item.is-done .input {
   text-decoration: line-through;
@@ -2457,4 +2463,48 @@ button.side-nudge {
 }
 .install-steps li + li {
   margin-top: 4px;
+}
+
+/* Times attached to a subtask or a habit step. */
+.subtask-when {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.subtask-when-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.step-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.step-time .input[type='time'] {
+  width: 96px;
+  min-width: 0;
+  padding: 3px 6px;
+  font-size: 12.5px;
+}
+.step-time .step-minutes {
+  width: 52px;
+  padding: 3px 6px;
+  font-size: 12.5px;
+}
+/* On a phone the row is already tight; the number speaks for itself. */
+@media (max-width: 460px) {
+  .step-min-label {
+    display: none;
+  }
 }

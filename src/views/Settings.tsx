@@ -11,6 +11,7 @@ import { useJournal } from '../journal/store';
 import { useJournalLock } from '../journal/vault';
 import { useGoals } from '../goals/store';
 import { sound, useSoundPrefs } from '../lib/sound';
+import { LEAD_OPTIONS, deliver, enableSystemNotifications, notificationPermission, useReminderPrefs } from '../lib/reminders';
 import { AccountCard } from '../cloud/ui/AccountCard';
 import { InstallCard } from '../components/install';
 import { withSyncPaused } from '../cloud/controller';
@@ -110,6 +111,8 @@ export function SettingsView() {
 
       <SoundSettings />
 
+      <ReminderSettings />
+
       <InstallCard />
 
       <section className="card stack">
@@ -167,6 +170,83 @@ export function SettingsView() {
         </div>
       </section>
     </div>
+  );
+}
+
+function ReminderSettings() {
+  const { enabled, leadMinutes, system, setEnabled, setLead, setSystem } = useReminderPrefs();
+  const toast = useUI((s) => s.toast);
+  const [permission, setPermission] = useState(notificationPermission);
+
+  const ask = async () => {
+    const result = await enableSystemNotifications();
+    setPermission(result);
+    if (result === 'granted') toast('Notifications on', 'complete');
+    else if (result === 'denied') toast('Your browser is blocking notifications');
+  };
+
+  return (
+    <section className="card stack">
+      <h3 className="card-title">Reminders</h3>
+      <div className="setting-row">
+        <span>Remind me before something starts</span>
+        <Segmented
+          value={enabled ? 'on' : 'off'}
+          onChange={(v) => setEnabled(v === 'on')}
+          options={[
+            { value: 'on', label: 'On' },
+            { value: 'off', label: 'Off' },
+          ]}
+        />
+      </div>
+      <div className="setting-row">
+        <span>How far ahead</span>
+        <Segmented
+          value={leadMinutes}
+          onChange={setLead}
+          options={LEAD_OPTIONS.map((m) => ({ value: m, label: `${m} min`, disabled: !enabled }))}
+        />
+      </div>
+      <div className="setting-row">
+        <span>
+          Desktop notifications
+          <span className="muted small"> · outside the app window</span>
+        </span>
+        {permission === 'unsupported' ? (
+          <span className="muted small">Not available in this browser</span>
+        ) : permission === 'denied' ? (
+          <span className="muted small">Blocked in your browser settings</span>
+        ) : permission === 'granted' ? (
+          <Segmented
+            value={system ? 'on' : 'off'}
+            onChange={(v) => setSystem(v === 'on')}
+            options={[
+              { value: 'on', label: 'On' },
+              { value: 'off', label: 'Off' },
+            ]}
+          />
+        ) : (
+          <button className="btn sm" disabled={!enabled} onClick={ask}>
+            Allow notifications
+          </button>
+        )}
+      </div>
+      <div className="row tight wrap">
+        <button
+          className="btn sm"
+          disabled={!enabled}
+          onClick={() =>
+            deliver({ key: `test:${Date.now()}`, title: 'Morning run', body: `In ${leadMinutes} min · 07:00–07:30`, start: 7 * 60, minutesAway: leadMinutes })
+          }
+        >
+          Send a test reminder
+        </button>
+      </div>
+      <p className="small muted">
+        Habits, timed habit steps, planned blocks and task timeframes (including a single subtask) all count. Reminders are checked while Meridian is open — a tab, or the installed app left
+        running — so nothing is sent from a server and nothing leaves this device.
+      </p>
+    </section>
   );
 }
 

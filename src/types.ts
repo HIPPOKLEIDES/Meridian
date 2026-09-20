@@ -65,6 +65,10 @@ export interface Project {
 export interface HabitStep {
   id: ID;
   text: string;
+  /** Scheduled time of day on the days the habit runs, or null/absent for "whenever". */
+  start?: Minutes | null;
+  /** How long the step takes, when it has a time. */
+  duration?: Minutes;
 }
 
 /** One day's record for a habit. `steps` holds the ids of checked steps. */
@@ -104,6 +108,8 @@ export interface TimeBlock {
   repeatDays: number[];
   areaId: ID | null;
   taskId: ID | null;
+  /** One subtask of `taskId`, when the block is for a single step of the task. */
+  subtaskId?: ID | null;
 }
 
 /** Time actually spent — from the timer, a completed habit, or manual entry. */

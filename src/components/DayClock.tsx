@@ -59,6 +59,8 @@ interface Arc {
   pending?: boolean;
   /** A task timeframe, and whether the task is done. */
   taskId?: ID | null;
+  /** The task or habit a scheduled subtask or step belongs to. */
+  parentTitle?: string;
   done?: boolean;
   repeating?: boolean;
   lane: number;
@@ -118,6 +120,7 @@ export function DayClock({ date }: { date: DateKey }) {
       areaName: area(p.areaId)?.name ?? null,
       pending: p.kind === 'habit' && !p.done,
       taskId: p.taskId,
+      parentTitle: p.parentTitle,
       done: p.kind === 'block' && !!p.taskId && !!p.done,
       repeating: p.repeating,
       lane: planLanes.lanes[i],
@@ -463,17 +466,16 @@ export function DayClock({ date }: { date: DateKey }) {
             <span className="dot" style={{ background: hover.arc.slot ? `var(--series-${hover.arc.slot})` : 'var(--unassigned)' }} />
             {hover.arc.title || 'Untitled'}
           </div>
+          {hover.arc.parentTitle && <div className="tooltip-row muted">Part of {hover.arc.parentTitle}</div>}
           <div className="tooltip-row">
             {fmtClock(hover.arc.start)}–{fmtClock(hover.arc.end)} · {fmtDuration(hover.arc.end - hover.arc.start)}
           </div>
           <div className="tooltip-row muted">
             {hover.arc.kind === 'habit'
-              ? hover.arc.pending
-                ? 'Habit · not done yet'
-                : 'Habit · done'
+              ? `${hover.arc.parentTitle ? 'Habit step' : 'Habit'} · ${hover.arc.pending ? 'not done yet' : 'done'}`
               : hover.arc.kind === 'block'
                 ? hover.arc.taskId
-                  ? `Task time${hover.arc.done ? ' · task done' : ''} · drag to move, ends to resize`
+                  ? `${hover.arc.parentTitle ? 'Subtask' : 'Task'} time${hover.arc.done ? ' · done' : ''} · drag to move, ends to resize`
                   : 'Planned block · drag to move, ends to resize'
                 : hover.arc.kind === 'timer'
                   ? 'Timer running'

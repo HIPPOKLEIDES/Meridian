@@ -186,6 +186,7 @@ function HabitDueRow({ habit, date }: { habit: Habit; date: DateKey }) {
               <label key={st.id} className={`subtask${checked ? ' is-done' : ''}`}>
                 <CheckButton size="sm" checked={checked} disabled={future} onToggle={() => toggleStep(habit.id, date, st.id)} />
                 <span>{st.text}</span>
+                {st.start !== null && st.start !== undefined && <span className="subtask-when-chip">{fmtClock(st.start)}</span>}
               </label>
             );
           })}

@@ -13,6 +13,19 @@ self.addEventListener('message', (event) => {
   if (event.data?.type === 'skip-waiting') self.skipWaiting();
 });
 
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = new URL(event.notification.data?.url || './', self.location.href).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if (client.url.startsWith(self.registration.scope)) return client.focus();
+      }
+      return self.clients.openWindow(url);
+    }),
+  );
+});
+
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches

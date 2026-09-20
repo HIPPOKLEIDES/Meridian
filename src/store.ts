@@ -97,6 +97,7 @@ export const newBlock = (b: Partial<TimeBlock> = {}): TimeBlock => ({
   repeatDays: [],
   areaId: null,
   taskId: null,
+  subtaskId: null,
   ...b,
 });
 

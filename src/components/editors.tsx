@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
-import type { DateKey, Habit, ID, Minutes, Project, Task, TaskStatus, TimeBlock, TimeEntry } from '../types';
+import type { CheckItem, DateKey, Habit, ID, Minutes, Project, Task, TaskStatus, TimeBlock, TimeEntry } from '../types';
 import { newBlock, newEntry, newHabit, newProject, newTask, uid, useStore } from '../store';
 import { useUI, type Dialog } from '../ui';
 import { byId, blockersOf, dependentsOf, PRIORITIES, taskArea, wouldCycle } from '../lib/tasks';
-import { fmtClock, fmtDuration, nowMinutes, todayKey } from '../lib/dates';
+import { fmtClock, fmtDateShort, fmtDuration, nowMinutes, todayKey } from '../lib/dates';
 import { DEFAULT_TIMEFRAME_MINUTES, describeRepeat, suggestedStart, timeframesOf } from '../lib/timeframes';
 import { useNotes } from '../notes/store';
 import { AreaSelect, Field, Icon, Modal, PriorityBadge, Segmented } from './common';
@@ -49,8 +49,24 @@ function TaskEditor({ id, draft }: { id: ID | null; draft?: Partial<Task> }) {
   const set = (patch: Partial<Task>) => setT((prev) => ({ ...prev, ...patch }));
   // Timeframes are time blocks linked to the task; edited here as a draft and saved with the task.
   const [frames, setFrames] = useState<DraftTimeframe[]>(() =>
-    timeframesOf(t.id, store.blocks).map((b) => ({ id: b.id, date: b.date, start: b.start, end: b.end, repeatDays: b.repeatDays, isNew: false })),
+    timeframesOf(t.id, store.blocks).map((b) => ({
+      id: b.id,
+      date: b.date,
+      start: b.start,
+      end: b.end,
+      repeatDays: b.repeatDays,
+      subtaskId: b.subtaskId ?? null,
+      isNew: false,
+    })),
   );
+  // A timeframe for the whole task, or for one subtask of it.
+  const addFrame = (subtaskId: ID | null = null) => {
+    const today = todayKey();
+    const from = frames[frames.length - 1]?.date ?? t.startDate ?? today;
+    const date = from < today ? today : from;
+    const start = suggestedStart(date, today, nowMinutes(new Date()));
+    setFrames((prev) => [...prev, { id: uid(), date, start, end: Math.min(1440, start + DEFAULT_TIMEFRAME_MINUTES), repeatDays: [], subtaskId, isNew: true }]);
+  };
   const framesValid = frames.every((f) => f.end > f.start);
   // Suggest the project's own tags first, then tags used anywhere else.
   const tagSuggestions = useMemo(() => {
@@ -73,14 +89,26 @@ function TaskEditor({ id, draft }: { id: ID | null; draft?: Partial<Task> }) {
 
   const saveTimeframes = (task: Task) => {
     const saved = timeframesOf(task.id, useStore.getState().blocks);
-    for (const b of saved) if (!frames.some((f) => f.id === b.id)) store.deleteBlock(b.id);
-    for (const f of frames) {
+    // A timeframe for a subtask that has since been deleted goes with it.
+    const live = frames.filter((f) => !f.subtaskId || task.subtasks.some((st) => st.id === f.subtaskId));
+    for (const b of saved) if (!live.some((f) => f.id === b.id)) store.deleteBlock(b.id);
+    for (const f of live) {
       if (f.isNew) {
-        store.addBlock({ id: f.id, title: task.title, taskId: task.id, date: f.date, start: f.start, end: f.end, repeatDays: f.repeatDays, areaId: null });
+        store.addBlock({
+          id: f.id,
+          title: task.title,
+          taskId: task.id,
+          subtaskId: f.subtaskId,
+          date: f.date,
+          start: f.start,
+          end: f.end,
+          repeatDays: f.repeatDays,
+          areaId: null,
+        });
       } else {
         const b = saved.find((x) => x.id === f.id);
-        if (b && (b.date !== f.date || b.start !== f.start || b.end !== f.end || b.title !== task.title)) {
-          store.updateBlock(f.id, { date: f.date, start: f.start, end: f.end, title: task.title });
+        if (b && (b.date !== f.date || b.start !== f.start || b.end !== f.end || b.title !== task.title || (b.subtaskId ?? null) !== f.subtaskId)) {
+          store.updateBlock(f.id, { date: f.date, start: f.start, end: f.end, title: task.title, subtaskId: f.subtaskId });
         }
       }
     }
@@ -171,7 +199,12 @@ function TaskEditor({ id, draft }: { id: ID | null; draft?: Partial<Task> }) {
                 </span>
               )}
             </span>
-            <Checklist items={t.subtasks} onChange={(subtasks) => set({ subtasks })} />
+            <Checklist
+              items={t.subtasks}
+              onChange={(subtasks) => set({ subtasks })}
+              trailing={(item) => <SubtaskWhen item={item} frames={frames} onSchedule={() => addFrame(item.id)} />}
+            />
+            {t.subtasks.length > 0 && <span className="field-hint">The clock button plans a time for that subtask alone; it shows on the day clock.</span>}
           </div>
 
           <div className="field">
@@ -274,11 +307,7 @@ function TaskEditor({ id, draft }: { id: ID | null; draft?: Partial<Task> }) {
               Clear dates
             </button>
           )}
-          <TimeframesField
-            frames={frames}
-            onChange={setFrames}
-            defaultDate={frames[frames.length - 1]?.date ?? t.startDate ?? todayKey()}
-          />
+          <TimeframesField frames={frames} onChange={setFrames} onAdd={() => addFrame(null)} subtasks={t.subtasks} />
           {logged > 0 && <p className="muted small">Time logged: {fmtDuration(logged)}</p>}
         </div>
       </div>
@@ -292,11 +321,42 @@ interface DraftTimeframe {
   start: Minutes;
   end: Minutes;
   repeatDays: number[];
+  /** Null when the timeframe is for the whole task. */
+  subtaskId: ID | null;
   isNew: boolean;
 }
 
+/** The times planned for one subtask, and a button to plan another. */
+function SubtaskWhen({ item, frames, onSchedule }: { item: CheckItem; frames: DraftTimeframe[]; onSchedule: () => void }) {
+  const mine = frames.filter((f) => f.subtaskId === item.id);
+  const today = todayKey();
+  return (
+    <span className="subtask-when">
+      {mine.map((f) => (
+        <span key={f.id} className="subtask-when-chip">
+          <Icon name="clock" size={11} />
+          {f.date === today ? fmtClock(f.start) : `${fmtDateShort(f.date)} ${fmtClock(f.start)}`}
+        </span>
+      ))}
+      <button type="button" className="btn icon ghost sm" title={`Plan a time for “${item.text}”`} aria-label={`Plan a time for “${item.text}”`} onClick={onSchedule}>
+        <Icon name="clock" size={14} />
+      </button>
+    </span>
+  );
+}
+
 /** When you plan to work on a task: any number of timeframes, today or on future days. */
-function TimeframesField({ frames, onChange, defaultDate }: { frames: DraftTimeframe[]; onChange: (frames: DraftTimeframe[]) => void; defaultDate: DateKey }) {
+function TimeframesField({
+  frames,
+  onChange,
+  onAdd,
+  subtasks,
+}: {
+  frames: DraftTimeframe[];
+  onChange: (frames: DraftTimeframe[]) => void;
+  onAdd: () => void;
+  subtasks: CheckItem[];
+}) {
   const patch = (id: ID, change: Partial<DraftTimeframe>) => onChange(frames.map((f) => (f.id === id ? { ...f, ...change } : f)));
   const total = frames.filter((f) => !f.repeatDays.length && f.end > f.start).reduce((s, f) => s + f.end - f.start, 0);
   return (
@@ -318,22 +378,28 @@ function TimeframesField({ frames, onChange, defaultDate }: { frames: DraftTimef
                   <Icon name="x" size={14} />
                 </button>
               </div>
+              {subtasks.length > 0 && (
+                <select
+                  className="input sm"
+                  aria-label="What this time is for"
+                  value={f.subtaskId ?? ''}
+                  onChange={(e) => patch(f.id, { subtaskId: e.target.value || null })}
+                >
+                  <option value="">Whole task</option>
+                  {subtasks.map((st) => (
+                    <option key={st.id} value={st.id}>
+                      {st.text}
+                    </option>
+                  ))}
+                </select>
+              )}
               {f.repeatDays.length > 0 && <span className="small muted">Repeats {describeRepeat(f.repeatDays)}</span>}
               {f.end <= f.start && <span className="small tone tone-bad">Must end after it starts</span>}
             </li>
           ))}
         </ul>
       )}
-      <button
-        type="button"
-        className="btn sm align-start"
-        onClick={() => {
-          const today = todayKey();
-          const date = defaultDate < today ? today : defaultDate;
-          const start = suggestedStart(date, today, nowMinutes(new Date()));
-          onChange([...frames, { id: uid(), date, start, end: Math.min(1440, start + DEFAULT_TIMEFRAME_MINUTES), repeatDays: [], isNew: true }]);
-        }}
-      >
+      <button type="button" className="btn sm align-start" onClick={onAdd}>
         <Icon name="plus" size={14} /> Add timeframe
       </button>
       <span className="field-hint">Or drag the task onto the clock on the Today page, for any day.</span>
@@ -433,8 +499,8 @@ function HabitEditor({ id, draft }: { id: ID | null; draft?: Partial<Habit> }) {
           <input type="checkbox" checked={h.logTime} onChange={(e) => set({ logTime: e.target.checked })} />
           Log {fmtDuration(h.duration)} to its area each time it's checked off
         </label>
-        <Field label="Steps" hint="Checking every step completes the habit for the day.">
-          <StepList steps={h.steps} onChange={(steps) => set({ steps })} />
+        <Field label="Steps" hint="Checking every step completes the habit for the day. Give a step a time and it gets its own place on the day clock.">
+          <StepList steps={h.steps} onChange={(steps) => set({ steps })} defaultStart={h.start ?? undefined} />
         </Field>
         <textarea
           className="input"
@@ -484,9 +550,10 @@ function BlockEditor({ id, draft, on }: { id: ID | null; draft?: Partial<TimeBlo
   if (id && !existing) return null;
 
   const valid = b.end > b.start;
+  const linkedSubtasks = (b.taskId ? store.tasks.find((t) => t.id === b.taskId)?.subtasks : undefined) ?? [];
   const save = () => {
     if (!valid) return;
-    const final = { ...b, title: b.title.trim() || 'Untitled block' };
+    const final = { ...b, title: b.title.trim() || 'Untitled block', subtaskId: linkedSubtasks.some((st) => st.id === b.subtaskId) ? b.subtaskId : null };
     if (existing) store.updateBlock(b.id, final);
     else store.addBlock(final);
     close();
@@ -573,6 +640,7 @@ function BlockEditor({ id, draft, on }: { id: ID | null; draft?: Partial<TimeBlo
               onChange={(task) =>
                 set({
                   taskId: task?.id ?? null,
+                  subtaskId: null,
                   title: b.title || task?.title || '',
                   areaId: b.areaId ?? (task ? taskArea(task, projects) : null),
                 })
@@ -580,6 +648,18 @@ function BlockEditor({ id, draft, on }: { id: ID | null; draft?: Partial<TimeBlo
             />
           </Field>
         </div>
+        {linkedSubtasks.length > 0 && (
+          <Field label="Which part" hint="Plan one subtask rather than the whole task.">
+            <select className="input" value={b.subtaskId ?? ''} onChange={(e) => set({ subtaskId: e.target.value || null })}>
+              <option value="">Whole task</option>
+              {linkedSubtasks.map((st) => (
+                <option key={st.id} value={st.id}>
+                  {st.text}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
       </div>
     </Modal>
   );
