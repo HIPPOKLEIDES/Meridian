@@ -1,10 +1,16 @@
 // Meridian service worker: makes the app open without a connection.
 // Your data already lives on the device (and syncs when online); this caches the app itself.
-const CACHE = 'meridian-app-v1';
+const CACHE = 'meridian-app-v2';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './favicon.svg', './icons/icon-192.png'];
 
+// A new worker waits until the app asks for it (or every window closes), so a running
+// app is never swapped out mid-edit. See applyUpdate() in src/lib/install.ts.
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)));
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'skip-waiting') self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {

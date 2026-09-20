@@ -8,14 +8,15 @@ import './personal.css';
 import './cloud.css';
 import { installUiSounds } from './lib/sound';
 import { startCloud } from './cloud/controller';
+import { registerServiceWorker, watchInstall } from './lib/install';
 
 installUiSounds();
 void startCloud();
 
+// Listen for the install offer before anything renders: the browser fires it at load.
+watchInstall();
 // Installable, offline-capable app in production builds (the dev server stays uncached).
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => void navigator.serviceWorker.register('./sw.js').catch(() => undefined));
-}
+if (import.meta.env.PROD) registerServiceWorker();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

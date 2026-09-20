@@ -2405,3 +2405,56 @@ body.is-dragging-task * {
 .flow-node-tags .task-tag {
   max-width: 110px;
 }
+
+/* Installing the app: a quiet sidebar nudge and the steps shown in Settings. */
+.side-nudge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  margin-top: 6px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.side-nudge:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.side-nudge > button,
+button.side-nudge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.side-nudge-main {
+  flex: 1;
+  min-width: 0;
+}
+.side-nudge-close {
+  color: var(--muted);
+  padding: 8px !important;
+}
+.side-nudge-close:hover {
+  color: var(--ink);
+}
+.install-steps {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--ink-2);
+}
+.install-steps li + li {
+  margin-top: 4px;
+}

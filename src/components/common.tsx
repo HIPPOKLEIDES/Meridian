@@ -80,6 +80,7 @@ const ICONS: Record<string, ReactNode> = {
     </>
   ),
   upload: <path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M4.5 15v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3" />,
+  install: <path d="M12 4v9M7.5 8.5 12 13l4.5-4.5M4.5 15v3a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-3" />,
   refresh: <path d="M20 11a8 8 0 0 0-14.5-4.5M4 4.5v4h4M4 13a8 8 0 0 0 14.5 4.5M20 19.5v-4h-4" />,
   journal: (
     <>

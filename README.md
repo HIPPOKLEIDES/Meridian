@@ -16,6 +16,8 @@ Everything works offline on one device, stored in the browser (localStorage and 
 
 To use Meridian on your phone and share projects with friends, put it online with a free Supabase project and static hosting: **see [DEPLOY.md](DEPLOY.md)**.
 
+Once it's on a real address, **Settings → Install Meridian** installs it as an app: its own window, an icon you can pin to the Windows taskbar, the macOS Dock or a phone home screen, and no address bar.
+
 ## Features
 
 | View | What it does |
@@ -29,7 +31,7 @@ To use Meridian on your phone and share projects with friends, put it online wit
 | **Goals** (Projects → Goals) | Open-ended aims that don't fit a task list ("Speak up more in groups", "Build deeper friendships"). Each has a why and a picture of success, a status (exploring / active / paused / achieved / let go) and a rough horizon instead of a deadline. Progress comes from check-ins (1–10 rating, the goal's own reflection prompts, a "next small step"), journal entries carrying the goal's `#tag`, unordered milestones, optional signals (numbers with a trend and target), a small-wins log, and linked habits (practices) and projects. A **weekly review** walks through every open goal; Today shows next steps and when the review is due. |
 | **Life areas** | Hours per area per day (stacked columns + table), weekly targets, top activities, and area management (name, color, target). |
 | **Health** | Stat tiles with trends for every measurement, time spent in the Health area, health habits, goals, and injuries. You can add custom measurements (waist, 5K time, 1RM…). Goals show a trend line, an estimated arrival date with an 80% range, and the rate needed to hit a deadline. Injuries track pain/mobility check-ins, expected recovery, a projected pain-free date, and linked rehab habits. Fitbit data syncs through the Google Health API. |
-| **Account & sharing** (Settings, project **Share**) | Email and password accounts. Every device keeps a full local copy and syncs changes both ways, with live updates and offline catch-up. Share a project by email or invite link as editor or viewer; members see only that project's tasks, task map and notes, and can be assigned tasks, which then show on their Today and Calendar. Installable on phones and works offline. |
+| **Account & sharing** (Settings, project **Share**) | Email and password accounts. Every device keeps a full local copy and syncs changes both ways, with live updates and offline catch-up. Share a project by email or invite link as editor or viewer; members see only that project's tasks, task map and notes, and can be assigned tasks, which then show on their Today and Calendar. Installable on Windows, macOS, phones and tablets, and works offline. |
 | **Finance** | Separate ledgers (personal + any number of businesses) with accounts, categories, and payees/payers, so every transaction shows *from → to*. Bank CSV import has column mapping, duplicate detection, and auto-categorizing rules. An overview covers income vs. spending, where money went, balances, and who paid whom. A **Taxes** page gives quarterly estimated payments (federal + state), safe-harbor amounts, a set-aside rate, and a Schedule C–style summary per business. |
 
 ## Design notes
@@ -99,7 +101,8 @@ To use Meridian on your phone and share projects with friends, put it online wit
 - **Images:** note images upload to the private `assets` bucket at `projects/<projectId>/<assetId>` once their project exists on the server. Devices without an image download it the first time `assetUrl` needs it (`setRemoteAssetFetcher`), and views retry missing images after notes sync.
 - **Assignment:** `Task.assigneeIds` and `Task.createdBy`. `isTaskForMe` filters Today, Calendar and Tasks ("Mine / Everyone's"): in a shared project a task is yours if it's assigned to you, or unassigned and created by you (tasks from before sharing count as the owner's).
 - **Editors that keep drafts** (journal, note pages, note titles, boards, goal text) take incoming changes when there's no unsaved typing and keep local typing otherwise; the typing then saves as the newer edit.
-- **Installable app:** `public/manifest.webmanifest`, icons drawn by `scripts/make-icons.mjs`, and `public/sw.js` (network-first page, cache-first hashed assets, registered only in production builds; Supabase requests are never cached). `vite.config.ts` uses `base: './'`.
+- **Installable app:** `public/manifest.webmanifest` (standalone window, taskbar/jump-list shortcuts, `navigate-existing` so the icon focuses the open window), icons drawn by `scripts/make-icons.mjs`, and `public/sw.js` (network-first page, cache-first hashed assets, registered only in production builds; Supabase requests are never cached). `vite.config.ts` uses `base: './'`.
+- **Install and update flow:** `src/lib/install.ts` keeps the browser's `beforeinstallprompt` for our own button (and falls back to per-platform instructions), and watches for a waiting service worker. A new version never swaps itself in under a running app: it waits for **Update and restart** (Settings, or the sidebar nudge), or for every window to close.
 - **Local stand-in:** `scripts/dev-supabase.mjs` serves just enough of Supabase's Auth, PostgREST and Storage HTTP APIs over PGlite for supabase-js, which makes it possible to test multi-user flows with no account (`DATA_DIR=.dev-supabase` persists data). It has no realtime, and it is for development only.
 
 ## Layout

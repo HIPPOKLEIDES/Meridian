@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Icon } from './components/common';
 import { DialogHost } from './components/editors';
 import { MiniTimer, TaskDragGhost, Toasts } from './components/widgets';
+import { InstallNudge } from './components/install';
 import { navigate, useResolvedTheme, useRoute } from './lib/hooks';
 import { todayKey } from './lib/dates';
 import { TodayView } from './views/Today';
@@ -105,6 +106,7 @@ export function App() {
         </ul>
         <MiniTimer />
         <SyncIndicator />
+        <InstallNudge />
       </nav>
       <main className="main">{view}</main>
       <DialogHost />

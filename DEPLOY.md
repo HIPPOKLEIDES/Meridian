@@ -97,14 +97,16 @@ Then go back to Supabase step 1.4 and enter the site's address (e.g. `https://me
 3. Use **Test connection** in Settings. It checks the address, the key, email sign-in and whether `schema.sql` has been run.
 4. Netlify's **password / visitor protection** (Site configuration → Access & security) makes visitors log in to Netlify first. Turn it off so your phone and friends can reach the app; Meridian's own accounts protect the data.
 
-## 4. Your phone
+## 4. Install it as an app
 
-Open the site on your phone and add it to your home screen:
+Open the site and go to **Settings → Install Meridian**. In Edge or Chrome that button installs it directly; other browsers get the steps for their menu.
 
+- **Windows (Edge or Chrome):** **Install Meridian** in Settings, or the install icon at the right of the address bar. It lands in the Start menu — right-click it there and **Pin to taskbar**. Right-clicking the taskbar icon jumps straight to Today, Tasks, Journal or Habits.
+- **macOS (Safari):** File → **Add to Dock**. In Chrome or Edge, use the Install button.
 - **iPhone (Safari):** Share → **Add to Home Screen**
 - **Android (Chrome):** menu → **Install app**
 
-It opens full-screen, works without signal and syncs when back online. Sign in with the same account.
+The installed app is the same site in its own window: no address bar, its own icon, works without a connection and syncs when back online. Sign in with the same account.
 
 The first time you sign in on a device that already has data, Meridian asks what to do with it:
 
@@ -157,7 +159,7 @@ Tasks assigned to someone appear on *their* Today and Calendar. In a shared proj
   1. Re-run `supabase/schema.sql` if it changed.
   2. Redeploy the site.
 
-  Installed phone apps pick up the new version on their next launch.
+  Open apps notice the new version within the hour (and whenever you switch back to them) and offer **Update and restart**; they also pick it up on their next launch.
 - **Tests:** `npm test` runs:
   - the sync-engine tests (two devices, offline conflicts, sharing, roles),
   - the database security tests.

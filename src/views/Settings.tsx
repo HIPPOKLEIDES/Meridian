@@ -12,6 +12,7 @@ import { useJournalLock } from '../journal/vault';
 import { useGoals } from '../goals/store';
 import { sound, useSoundPrefs } from '../lib/sound';
 import { AccountCard } from '../cloud/ui/AccountCard';
+import { InstallCard } from '../components/install';
 import { withSyncPaused } from '../cloud/controller';
 import { useSession } from '../cloud/session';
 
@@ -108,6 +109,8 @@ export function SettingsView() {
       </section>
 
       <SoundSettings />
+
+      <InstallCard />
 
       <section className="card stack">
         <h3 className="card-title">Your data</h3>
