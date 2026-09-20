@@ -229,7 +229,7 @@ function TasksCard({ date }: { date: DateKey }) {
           <div key={g.label} className="task-group">
             {groups.length > 1 && <div className="group-label">{g.label}</div>}
             {g.items.map((t) => (
-              <TaskRow key={t.id} task={t} tasks={map} draggable />
+              <TaskRow key={t.id} task={t} tasks={map} draggable date={date} />
             ))}
           </div>
         ))

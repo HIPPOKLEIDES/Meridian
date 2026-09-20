@@ -338,8 +338,8 @@ function SubtaskWhen({ item, frames, onSchedule }: { item: CheckItem; frames: Dr
           {f.date === today ? fmtClock(f.start) : `${fmtDateShort(f.date)} ${fmtClock(f.start)}`}
         </span>
       ))}
-      <button type="button" className="btn icon ghost sm" title={`Plan a time for “${item.text}”`} aria-label={`Plan a time for “${item.text}”`} onClick={onSchedule}>
-        <Icon name="clock" size={14} />
+      <button type="button" className="btn sm ghost" title={`Plan a time for “${item.text}”`} aria-label={`Plan a time for “${item.text}”`} onClick={onSchedule}>
+        <Icon name="clock" size={13} /> Plan
       </button>
     </span>
   );
@@ -499,7 +499,10 @@ function HabitEditor({ id, draft }: { id: ID | null; draft?: Partial<Habit> }) {
           <input type="checkbox" checked={h.logTime} onChange={(e) => set({ logTime: e.target.checked })} />
           Log {fmtDuration(h.duration)} to its area each time it's checked off
         </label>
-        <Field label="Steps" hint="Checking every step completes the habit for the day. Give a step a time and it gets its own place on the day clock.">
+        <Field
+          label="Steps"
+          hint={`Checking every step completes the habit for the day. Give a step a time and it gets its own place on the day clock, ${describeRepeat(h.days)}.`}
+        >
           <StepList steps={h.steps} onChange={(steps) => set({ steps })} defaultStart={h.start ?? undefined} />
         </Field>
         <textarea

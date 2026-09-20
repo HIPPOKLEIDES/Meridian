@@ -7,7 +7,7 @@ import { fmtClock, fmtDateShort, fmtDuration, fmtHours, nowMinutes, toKey } from
 import { byId } from '../lib/tasks';
 import { useNow } from '../lib/hooks';
 import { placeTimeframe, snapMinutes } from '../lib/timeframes';
-import { useTaskDrag, useTaskDropTarget } from '../lib/taskDrag';
+import { useTaskDrag, useTaskDropTarget, type TaskDropPayload } from '../lib/taskDrag';
 import { sound } from '../lib/sound';
 
 const S = 480;
@@ -174,13 +174,15 @@ export function DayClock({ date }: { date: DateKey }) {
 
   // Dropping a task on the clock plans an hour for it at that time, on the day shown.
   const onTaskDrop = useCallback(
-    (taskId: ID, clientX: number, clientY: number) => {
+    ({ taskId, subtaskId }: TaskDropPayload, clientX: number, clientY: number) => {
       const task = useStore.getState().tasks.find((t) => t.id === taskId);
       if (!task || !svgRef.current) return;
+      const subtask = subtaskId ? task.subtasks.find((st) => st.id === subtaskId) : undefined;
       const { start, end } = placeTimeframe(toMinute({ clientX, clientY }));
-      addBlock({ title: task.title, taskId, date, start, end, repeatDays: [], areaId: null });
+      addBlock({ title: task.title, taskId, subtaskId: subtask ? subtaskId : null, date, start, end, repeatDays: [], areaId: null });
       sound('connect');
-      toast(`Planned “${task.title || 'Untitled task'}” ${fmtClock(start)}–${fmtClock(end)}${date === toKey(new Date()) ? '' : ` on ${fmtDateShort(date)}`}. Drag its ends to adjust.`, null);
+      const what = subtask?.text || task.title || 'Untitled task';
+      toast(`Planned “${what}” ${fmtClock(start)}–${fmtClock(end)}${date === toKey(new Date()) ? '' : ` on ${fmtDateShort(date)}`}. Drag its ends to adjust.`, null);
     },
     // toMinute only reads the svg's current position, so it needn't be a dependency.
     [addBlock, date, toast],

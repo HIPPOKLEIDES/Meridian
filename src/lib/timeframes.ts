@@ -22,11 +22,21 @@ export interface Occurrence {
   end: Minutes;
 }
 
-/** The next time a task is planned: later today (not yet over) or on a future day, looking ahead up to `horizonDays`. */
-export function nextTimeframe(taskId: ID, blocks: TimeBlock[], today: DateKey, nowMin: Minutes, horizonDays = 60): Occurrence | null {
+/**
+ * The next time a task is planned: later today (not yet over) or on a future day, looking ahead up to `horizonDays`.
+ * Pass `subtaskId` to ask about one subtask's own times instead of the task's.
+ */
+export function nextTimeframe(
+  taskId: ID,
+  blocks: TimeBlock[],
+  today: DateKey,
+  nowMin: Minutes,
+  { subtaskId, horizonDays = 60 }: { subtaskId?: ID | null; horizonDays?: number } = {},
+): Occurrence | null {
   let best: Occurrence | null = null;
   for (const b of blocks) {
     if (b.taskId !== taskId) continue;
+    if (subtaskId !== undefined && (b.subtaskId ?? null) !== subtaskId) continue;
     let date: DateKey | null = null;
     if (!b.repeatDays.length) {
       if (b.date > today || (b.date === today && b.end > nowMin)) date = b.date;

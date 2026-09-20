@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { sound } from '../lib/sound';
-import type { DateKey, ID, Priority, Task } from '../types';
+import type { CheckItem, DateKey, ID, Priority, Task } from '../types';
 import { useStore } from '../store';
 import { useUI } from '../ui';
 import { blockersOf, byId, isOverdue, PRIORITIES, taskArea } from '../lib/tasks';
 import { addDays, fmtClock, fmtDateShort, fmtRange, nowMinutes, todayKey } from '../lib/dates';
-import { nextTimeframe } from '../lib/timeframes';
+import { DEFAULT_TIMEFRAME_MINUTES, nextTimeframe, suggestedStart } from '../lib/timeframes';
 import { beginTaskDrag, useTaskDrag } from '../lib/taskDrag';
 import { useNow } from '../lib/hooks';
 import { AreaDot, AreaSelect, CheckButton, Icon, PriorityBadge } from './common';
@@ -19,6 +19,7 @@ export function TaskRow({
   showProject = true,
   priorityEditable = false,
   draggable = false,
+  date,
 }: {
   task: Task;
   /** Lookup of all tasks, for lock state. */
@@ -27,6 +28,8 @@ export function TaskRow({
   priorityEditable?: boolean;
   /** Show a handle for dragging the task onto the day clock. */
   draggable?: boolean;
+  /** The day the row is shown for; subtasks are planned on it. Defaults to today. */
+  date?: DateKey;
 }) {
   const [expanded, setExpanded] = useState(false);
   const blocks = useStore((s) => s.blocks);
@@ -130,14 +133,65 @@ export function TaskRow({
       {expanded && (
         <div className="task-row-subtasks">
           {task.subtasks.map((st) => (
-            <label key={st.id} className={`subtask${st.done ? ' is-done' : ''}`}>
-              <CheckButton size="sm" checked={st.done} onToggle={() => toggleSubtask(task.id, st.id)} />
-              <span>{st.text}</span>
-            </label>
+            <div key={st.id} className="subtask-row">
+              <label className={`subtask${st.done ? ' is-done' : ''}`}>
+                <CheckButton size="sm" checked={st.done} onToggle={() => toggleSubtask(task.id, st.id)} />
+                <span>{st.text}</span>
+              </label>
+              <SubtaskPlan task={task} subtask={st} date={date ?? today} draggable={draggable} />
+            </div>
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+/** Plan a time for one subtask: drag it onto the clock, or pick a time. */
+function SubtaskPlan({ task, subtask, date, draggable }: { task: Task; subtask: CheckItem; date: DateKey; draggable: boolean }) {
+  const blocks = useStore((s) => s.blocks);
+  const open = useUI((s) => s.open);
+  const now = useNow(60_000);
+  const today = todayKey();
+  const next = nextTimeframe(task.id, blocks, today, nowMinutes(now), { subtaskId: subtask.id });
+  const label = subtask.text || 'this subtask';
+  return (
+    <span className="subtask-plan">
+      {next && (
+        <span className="subtask-when-chip">
+          <Icon name="clock" size={11} />
+          {next.date === today ? fmtClock(next.start) : `${fmtDateShort(next.date)} ${fmtClock(next.start)}`}
+        </span>
+      )}
+      {draggable && (
+        <button
+          type="button"
+          className="drag-handle"
+          aria-label={`Drag “${label}” onto the clock to plan a time`}
+          title="Drag onto the clock to plan a time"
+          onPointerDown={(e) => beginTaskDrag(e, { id: task.id, subtaskId: subtask.id, title: label })}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Icon name="grip" size={13} />
+        </button>
+      )}
+      <button
+        type="button"
+        className="btn sm ghost"
+        title={`Plan a time for “${label}”`}
+        onClick={(e) => {
+          e.stopPropagation();
+          const start = suggestedStart(date, today, nowMinutes(new Date()));
+          open({
+            kind: 'block',
+            id: null,
+            draft: { title: task.title, taskId: task.id, subtaskId: subtask.id, date, start, end: Math.min(1440, start + DEFAULT_TIMEFRAME_MINUTES) },
+          });
+        }}
+      >
+        <Icon name="clock" size={13} /> Plan
+      </button>
+    </span>
   );
 }
 

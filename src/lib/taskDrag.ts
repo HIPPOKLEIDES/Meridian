@@ -9,6 +9,8 @@ import type { ID } from '../types';
 
 export interface TaskDrag {
   taskId: ID;
+  /** Set when a single subtask is being dragged rather than the whole task. */
+  subtaskId: ID | null;
   title: string;
   x: number;
   y: number;
@@ -18,10 +20,16 @@ export interface TaskDrag {
 
 export const useTaskDrag = create<{ drag: TaskDrag | null }>(() => ({ drag: null }));
 
+export interface TaskDropPayload {
+  taskId: ID;
+  subtaskId: ID | null;
+  title: string;
+}
+
 interface DropTarget {
   id: string;
   element: () => Element | null;
-  onDrop: (taskId: ID, clientX: number, clientY: number) => void;
+  onDrop: (payload: TaskDropPayload, clientX: number, clientY: number) => void;
 }
 
 const targets = new Map<string, DropTarget>();
@@ -45,7 +53,7 @@ export function useTaskDropTarget(id: string, ref: RefObject<Element | null>, on
 const THRESHOLD_PX = 5;
 
 /** Call from a drag handle's onPointerDown. The drag starts once the pointer has moved a few pixels. */
-export function beginTaskDrag(e: ReactPointerEvent, task: { id: ID; title: string }) {
+export function beginTaskDrag(e: ReactPointerEvent, task: { id: ID; title: string; subtaskId?: ID | null }) {
   if (e.button !== 0) return;
   e.preventDefault();
   e.stopPropagation();
@@ -60,7 +68,9 @@ export function beginTaskDrag(e: ReactPointerEvent, task: { id: ID; title: strin
       document.body.classList.add('is-dragging-task');
     }
     ev.preventDefault();
-    useTaskDrag.setState({ drag: { taskId: task.id, title: task.title, x: ev.clientX, y: ev.clientY, target: hit(ev.clientX, ev.clientY)?.id ?? null } });
+    useTaskDrag.setState({
+      drag: { taskId: task.id, subtaskId: task.subtaskId ?? null, title: task.title, x: ev.clientX, y: ev.clientY, target: hit(ev.clientX, ev.clientY)?.id ?? null },
+    });
   };
   const finish = (drop: PointerEvent | null) => {
     window.removeEventListener('pointermove', move);
@@ -69,7 +79,7 @@ export function beginTaskDrag(e: ReactPointerEvent, task: { id: ID; title: strin
     window.removeEventListener('keydown', key);
     document.body.classList.remove('is-dragging-task');
     useTaskDrag.setState({ drag: null });
-    if (active && drop) hit(drop.clientX, drop.clientY)?.onDrop(task.id, drop.clientX, drop.clientY);
+    if (active && drop) hit(drop.clientX, drop.clientY)?.onDrop({ taskId: task.id, subtaskId: task.subtaskId ?? null, title: task.title }, drop.clientX, drop.clientY);
   };
   const up = (ev: PointerEvent) => finish(ev);
   const cancel = () => finish(null);

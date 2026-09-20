@@ -105,12 +105,12 @@ export function StepList({
           {step.start === null || step.start === undefined ? (
             <button
               type="button"
-              className="btn icon ghost sm"
+              className="btn sm ghost"
               aria-label={`Give “${step.text}” a time`}
-              title="Give this step a time"
+              title="Give this step its own time on the day clock"
               onClick={() => patch(step.id, { start: nextStart(i), duration: step.duration ?? HABIT_STEP_MINUTES })}
             >
-              <Icon name="clock" size={14} />
+              <Icon name="clock" size={13} /> Time
             </button>
           ) : (
             <span className="step-time">

@@ -2508,3 +2508,32 @@ button.side-nudge {
     display: none;
   }
 }
+
+/* A subtask in a task row, with its own planning controls. */
+.subtask-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.subtask-row > .subtask {
+  flex: 1;
+  min-width: 0;
+}
+.subtask-plan {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.subtask-row:hover .subtask-plan,
+.subtask-plan:focus-within,
+.subtask-plan:has(.subtask-when-chip) {
+  opacity: 1;
+}
+@media (hover: none) {
+  .subtask-plan {
+    opacity: 1;
+  }
+}
