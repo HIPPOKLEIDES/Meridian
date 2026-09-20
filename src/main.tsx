@@ -6,6 +6,7 @@ import './sections.css';
 import './notes.css';
 import './personal.css';
 import './cloud.css';
+import './ai.css';
 import { installUiSounds } from './lib/sound';
 import { startCloud } from './cloud/controller';
 import { registerServiceWorker, watchInstall } from './lib/install';

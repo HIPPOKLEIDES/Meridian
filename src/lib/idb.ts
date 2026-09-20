@@ -77,8 +77,11 @@ export function flushIdb() {
   for (const [key, value] of queued) idbSet(STORES.kv, key, value).catch((e) => console.error(`Saving ${key} failed`, e));
   queued.clear();
 }
-window.addEventListener('pagehide', flushIdb);
-document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && flushIdb());
+// Guarded so the stores can also be imported outside a browser (tests, tooling).
+if (typeof window !== 'undefined') {
+  window.addEventListener('pagehide', flushIdb);
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && flushIdb());
+}
 
 export const idbStateStorage: StateStorage = {
   getItem: async (name) => (await idbGet<string>(STORES.kv, name)) ?? null,

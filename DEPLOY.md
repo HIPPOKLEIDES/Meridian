@@ -114,7 +114,18 @@ The first time you sign in on a device that already has data, Meridian asks what
 - **Replace it** with your account's data.
 - **Cancel** and sign out.
 
-## 5. Sharing with friends
+## 5. The coach (optional)
+
+The Coach page talks to Claude with **your own Anthropic API key**, from the browser, with no server in between:
+
+1. Create a key in the [Anthropic Console](https://console.anthropic.com/settings/keys) and add a little credit.
+2. Paste it into Coach. A message costs a penny or two, depending on the model.
+
+The key is stored in that browser only — it is never synced to your account and never written to a backup, so enter it again on your phone if you want the coach there too. Revoke it in the Console if a device is lost.
+
+Friends you share projects with do not get the coach: it reads the data on their device and needs a key of their own.
+
+## 6. Sharing with friends
 
 Open a project and click **Share**. You can:
 
@@ -149,7 +160,8 @@ Tasks assigned to someone appear on *their* Today and Calendar. In a shared proj
 - **Everything else** (health, finances, notes…) is private to your account.
   - It's stored readable in your Supabase database, which Supabase encrypts on disk.
   - You, as the project's admin, can see it in the Supabase dashboard.
-- **Personal API keys** stay on each device: the USDA key isn't synced, and Google sign-in tokens are never stored.
+- **Personal API keys** stay on each device: the Anthropic key for the coach and the USDA key aren't synced or backed up, and Google sign-in tokens are never stored.
+- **The coach** sends a summary of your habits, tasks, goals and hours to Anthropic when you ask it something — never your whole history, and journal text or health readings only if you switch them on. Coach → "what gets sent" shows exactly what goes.
 
 ## Keeping it running
 

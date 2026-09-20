@@ -1,0 +1,129 @@
+/* The coach: a conversation with Claude, plus the change cards it offers. */
+
+.coach {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.coach-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 2px;
+  max-height: min(58vh, 640px);
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+.coach-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
+.coach-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.coach-turn {
+  border-radius: var(--radius);
+  max-width: 100%;
+}
+.coach-turn.is-user {
+  align-self: flex-end;
+  max-width: 78%;
+  padding: 9px 13px;
+  background: var(--surface-2);
+  white-space: pre-wrap;
+}
+.coach-turn.is-coach {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.coach-turn.is-coach .note-preview > :first-child {
+  margin-top: 0;
+}
+.coach-turn.is-coach .note-preview > :last-child {
+  margin-bottom: 0;
+}
+.coach-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: center;
+}
+.coach-caret {
+  display: inline-block;
+  width: 7px;
+  height: 14px;
+  background: var(--ink-2);
+  animation: pulse 1.1s ease-in-out infinite;
+}
+
+.coach-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.coach-card.is-applied {
+  border-color: color-mix(in srgb, var(--good) 45%, var(--border));
+}
+.coach-card.is-dismissed {
+  opacity: 0.6;
+}
+.coach-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.coach-card-kind {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.coach-card-lines {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--ink-2);
+}
+.coach-card-lines li + li {
+  margin-top: 2px;
+}
+
+.coach-composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.coach-composer textarea {
+  flex: 1;
+  resize: vertical;
+}
+
+.coach-context {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+.coach-context summary {
+  cursor: pointer;
+  color: var(--ink-2);
+}
+.coach-json {
+  max-height: 320px;
+  overflow: auto;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}

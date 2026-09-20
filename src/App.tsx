@@ -17,6 +17,7 @@ import { FinanceView } from './finance/FinanceView';
 import { JournalView } from './journal/JournalView';
 import { GoalsView } from './goals/GoalsView';
 import { GoalReview } from './goals/GoalReview';
+import { CoachView } from './ai/CoachView';
 import { JoinView } from './cloud/ui/JoinView';
 import { SyncIndicator } from './cloud/ui/SyncIndicator';
 import { CloudDialogs } from './cloud/ui/CloudDialogs';
@@ -31,6 +32,7 @@ const NAV = [
   { id: 'areas', label: 'Life areas', icon: 'areas' },
   { id: 'health', label: 'Health', icon: 'heart' },
   { id: 'finance', label: 'Finance', icon: 'wallet' },
+  { id: 'coach', label: 'Coach', icon: 'spark' },
   { id: 'settings', label: 'Settings', icon: 'settings' },
 ];
 
@@ -75,6 +77,9 @@ export function App() {
       break;
     case 'finance':
       view = <FinanceView tab={a} id={b} />;
+      break;
+    case 'coach':
+      view = <CoachView />;
       break;
     case 'settings':
       view = <SettingsView />;
